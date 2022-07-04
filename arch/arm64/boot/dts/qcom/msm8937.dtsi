@@ -34,25 +34,6 @@
 				compatible = "android,vbmeta";
 				parts = "vbmeta,boot,system,vendor,dtbo,recovery,product";
 			};
-
-			fstab {
-				compatible = "android,fstab";
-				product {
-					compatible = "android,product";
-					dev = "/dev/block/platform/soc/7824900.sdhci/by-name/product";
-					type = "ext4";
-					mnt_flags = "ro,errors=panic";
-					fsmgr_flags = "wait,verify,avb";
-				};				
-				vendor {
-					compatible = "android,vendor";
-					dev = "/dev/block/platform/soc/7824900.sdhci/by-name/vendor";
-					type = "ext4";
-					mnt_flags = "ro,barrier=1,discard";
-					fsmgr_flags = "wait,verify,avb";
-					status = "ok";
-				};
-			};
 		};
 	};
 
