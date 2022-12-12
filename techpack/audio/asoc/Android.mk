@@ -80,6 +80,16 @@ LOCAL_MODULE_DEBUG_ENABLE := true
 LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
 include $(DLKM_DIR)/AndroidKernelModule.mk
 endif
+#+bug600729,zhouweijie.wt,add,20201120,Q->R audio bring up
+###########################################################
+include $(CLEAR_VARS)
+LOCAL_MODULE              := $(AUDIO_CHIPSET)_AW87329.ko
+LOCAL_MODULE_KBUILD_NAME  := AW87329_dlkm.ko
+LOCAL_MODULE_TAGS         := optional
+LOCAL_MODULE_DEBUG_ENABLE := true
+LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
+include $(DLKM_DIR)/AndroidKernelModule.mk
+#-bug600729,zhouweijie.wt,add,20201120,Q->R audio bring up
 ###########################################################
 include $(CLEAR_VARS)
 ifeq ($(strip $(AUDIO_FEATURE_ENABLED_DLKM_8909W)),true)
@@ -123,6 +133,25 @@ LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
 include $(DLKM_DIR)/AndroidKernelModule.mk
 endif
 ###########################################################
+# +Bug601073, qiuyonghui.wt, 20201117, add, audio bring up
+include $(CLEAR_VARS)
+LOCAL_MODULE              := $(AUDIO_CHIPSET)_AW87319L.ko
+LOCAL_MODULE_KBUILD_NAME  := AW87319L_dlkm.ko
+LOCAL_MODULE_TAGS         := optional
+LOCAL_MODULE_DEBUG_ENABLE := true
+LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
+include $(DLKM_DIR)/AndroidKernelModule.mk
+###########################################################
+include $(CLEAR_VARS)
+LOCAL_MODULE              := $(AUDIO_CHIPSET)_AW87319R.ko
+LOCAL_MODULE_KBUILD_NAME  := AW87319R_dlkm.ko
+LOCAL_MODULE_TAGS         := optional
+LOCAL_MODULE_DEBUG_ENABLE := true
+LOCAL_MODULE_PATH         := $(KERNEL_MODULES_OUT)
+include $(DLKM_DIR)/AndroidKernelModule.mk
+###########################################################
+# -Bug601073, qiuyonghui.wt, 20201117, add, audio bring up
+
 
 endif # DLKM check
 endif # supported target check

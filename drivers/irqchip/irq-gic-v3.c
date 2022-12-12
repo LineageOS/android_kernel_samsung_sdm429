@@ -43,6 +43,9 @@
 #include <linux/syscore_ops.h>
 
 #include "irq-gic-common.h"
+#ifdef CONFIG_SEC_PM
+#include <linux/wakeup_reason.h>
+#endif
 
 #define MAX_IRQ			1020U	/* Max number of SGI+PPI+SPI */
 #define SPI_START_IRQ		32	/* SPI start irq number */
@@ -719,9 +722,10 @@ static void gic_show_resume_irq(struct gic_chip_data *gic)
 	}
 
 	for (i = find_first_bit((unsigned long *)pending, gic->irq_nr);
-	     i < gic->irq_nr;
-	     i = find_next_bit((unsigned long *)pending, gic->irq_nr, i+1)) {
+		 i < gic->irq_nr;
+		 i = find_next_bit((unsigned long *)pending, gic->irq_nr, i+1)) {
 		unsigned int irq = irq_find_mapping(gic->domain, i);
+#ifndef CONFIG_SEC_PM
 		struct irq_desc *desc = irq_to_desc(irq);
 		const char *name = "null";
 
@@ -731,6 +735,9 @@ static void gic_show_resume_irq(struct gic_chip_data *gic)
 			name = desc->action->name;
 
 		pr_warn("%s: %d triggered %s\n", __func__, irq, name);
+#else
+		log_wakeup_reason(irq);
+#endif
 	}
 }
 

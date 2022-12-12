@@ -148,7 +148,8 @@
 				qcom,decimation = <2>;
 				qcom,pre-div-channel-scaling = <0>;
 				qcom,calibration-type = "ratiometric";
-				qcom,scale-function = <17>;
+				//+Bug601084, yangpingao.wt, modify, 2020/11/15, P81081 charger bring up
+				qcom,scale-function = <22>;
 				qcom,hw-settle-time = <0>;
 				qcom,fast-avg-setup = <0>;
 				qcom,cal-val = <0>;
@@ -314,17 +315,31 @@
 
 			qcom,pmic-revid = <&pmi632_revid>;
 			dpdm-supply = <&qusb_phy>;
-			qcom,auto-recharge-soc = <98>;
+
+			//+Bug601084, yangpingao.wt, modify, 2020/11/15, P81081 charger bring up
+			qcom,auto-recharge-soc = <99>;
+			qcom,auto-recharge-vbat-mv = <4000000>;
 			qcom,chg-vadc = <&pmi632_vadc>;
 			qcom,flash-disable-soc = <10>;
+			qcom,fcc-max-ua = <1500000>;
+			qcom,fv-max-uv = <4400000>;
+			qcom,usb-icl-ua = <1500000>;
+			qcom,otg-cl-ua = <1000000>;
 			qcom,sw-jeita-enable;
-			qcom,step-charging-enable;
-			qcom,hw-die-temp-mitigation;
-			qcom,hw-connector-mitigation;
+			qcom,chg-term-src = <1>;
+			qcom,chg-term-current-ma = <(-150)>;
+			/*qcom,step-charging-enable;*/
+			//-Bug601084, yangpingao.wt, modify, 2020/11/15, P81081 charger bring up
+
+//+Bug 439935 xushengjuan.wt,modify,20201112,S86117AA1 charger bring up
+			//qcom,hw-die-temp-mitigation;
+			//qcom,hw-connector-mitigation;
+//-Bug 439935 xushengjuan.wt,modify,20201112,S86117AA1 charger bring up
 			qcom,connector-internal-pull-kohm = <100>;
 
+			//+Bug601084, yangpingao.wt, modify, 2020/11/15, P81081 charger bring up
 			qcom,thermal-mitigation
-				= <3000000 2500000 2000000 1500000
+				= <2000000 2000000 2000000 1500000
 					1000000 500000>;
 
 			qcom,chgr@1000 {
@@ -483,7 +498,8 @@
 			#address-cells = <1>;
 			#size-cells = <1>;
 
-			qcom,qg-iterm-ma = <100>;
+			//+Bug601084, yangpingao.wt, modify, 2020/11/15, modifiy low probability quick recharger
+			qcom,qg-iterm-ma = <220>;
 			qcom,hold-soc-while-full;
 			qcom,linearize-soc;
 			qcom,qg-vadc = <&pmi632_vadc>;

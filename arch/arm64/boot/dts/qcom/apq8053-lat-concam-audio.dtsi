@@ -565,7 +565,7 @@
 
 &clock_audio {
 	status = "okay";
-	qcom,audio-ref-clk-gpio = <&pm8953_gpios 1 0>;
+	//qcom,audio-ref-clk-gpio = <&pm8953_gpios 1 0>;
 	qcom,lpass-mclk-id = "pri_mclk";
 	clocks = <&clock_gcc clk_div_clk2>;
 	pinctrl-names = "sleep", "active";

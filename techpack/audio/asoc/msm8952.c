@@ -87,18 +87,43 @@ static struct wcd_mbhc_config mbhc_cfg = {
 	.swap_gnd_mic = NULL,
 	.hs_ext_micbias = false,
 	.key_code[0] = KEY_MEDIA,
+#ifdef CONFIG_ARCH_MSM8953
+	.key_code[1] = KEY_VOLUMEUP,
+	.key_code[2] = KEY_VOLUMEDOWN,
+	.key_code[3] = 0,
+#elif defined CONFIG_ARCH_MSM8937
+    .key_code[1] = KEY_VOLUMEUP,
+    .key_code[2] = KEY_VOLUMEDOWN,
+    .key_code[3] = 0,
+#else
 	.key_code[1] = KEY_VOICECOMMAND,
 	.key_code[2] = KEY_VOLUMEUP,
 	.key_code[3] = KEY_VOLUMEDOWN,
+#endif
 	.key_code[4] = 0,
 	.key_code[5] = 0,
 	.key_code[6] = 0,
 	.key_code[7] = 0,
+//+bug 603250,zhouweijie.wt,modify,20201203,modify for car aux cable function
+#ifdef CONFIG_ARCH_MSM8953
+	.linein_th = 60000,
+//bug 603945, tangliang1.wt, modify, 20201211, modify for car AUX cable function
+#elif defined CONFIG_ARCH_MSM8937
+	.linein_th = 60000,
+#else
 	.linein_th = 5000,
+#endif
+//-bug 603250,zhouweijie.wt,modify,20201203,modify for car aux cable function
 	.moisture_en = false,
 	.mbhc_micbias = 0,
 	.anc_micbias = 0,
 	.enable_anc_mic_detect = false,
+/* +Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
+#ifdef CONFIG_ARCH_MSM8937
+    .hph_en_gpio = -1,
+    .hph_in_gpio = -1,
+#endif
+/* -Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
 };
 
 static struct afe_clk_set mi2s_tx_clk = {
@@ -138,6 +163,12 @@ static const char *const proxy_rx_ch_text[] = {"One", "Two", "Three", "Four",
 static const char *const vi_feed_ch_text[] = {"One", "Two"};
 static char const *mi2s_rx_sample_rate_text[] = {"KHZ_48",
 					"KHZ_96", "KHZ_192"};
+
+/* +Bug601073, qiuyonghui.wt, 20201117, add, audio bring up  */
+#ifdef CONFIG_ARCH_MSM8937
+static const char *const hs_amp_text[] = {"DISABLE", "ENABLE"};
+#endif
+/* -Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
 
 static inline int param_is_mask(int p)
 {
@@ -772,6 +803,46 @@ static int msm8952_enable_dig_cdc_clk(struct snd_soc_codec *codec,
 	return ret;
 }
 
+/*  +Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
+#ifdef CONFIG_ARCH_MSM8937
+static void msm8952_ext_hs_control(u32 enable)
+{
+    gpio_direction_output(mbhc_cfg.hph_en_gpio, enable);
+    gpio_direction_output(mbhc_cfg.hph_in_gpio, enable);
+    pr_err("%s: %s   headset\n", __func__,
+            enable ? "Enable" : "Disable");
+}
+
+static int headset_status_get(struct snd_kcontrol *kcontrol,
+        struct snd_ctl_elem_value *ucontrol)
+{
+    pr_debug("%s:  get headset_status_get\n", __func__);
+    return 0;
+}
+
+static int headset_status_put(struct snd_kcontrol *kcontrol,
+        struct snd_ctl_elem_value *ucontrol)
+{
+    int state = 0;
+    state = ucontrol->value.integer.value[0];
+    pr_debug("%s:  state = %d\n", __func__, state);
+
+    switch (state) {
+        case 0:
+            msm8952_ext_hs_control(0);
+            break;
+        case 1:
+            msm8952_ext_hs_control(1);
+            break;
+        default:
+            pr_err("%s: Unexpected input value\n", __func__);
+            break;
+    }
+    return 0;
+}
+#endif
+/*  -Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
+
 static int msm_btsco_rate_get(struct snd_kcontrol *kcontrol,
 				struct snd_ctl_elem_value *ucontrol)
 {
@@ -1052,6 +1123,13 @@ static const struct soc_enum msm_snd_enum[] = {
 				vi_feed_ch_text),
 	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(mi2s_rx_sample_rate_text),
 				mi2s_rx_sample_rate_text),
+/*  +Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
+#ifdef CONFIG_ARCH_MSM8937
+    SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(hs_amp_text),
+                hs_amp_text),
+#endif
+/*  -Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
+
 };
 
 static const struct snd_kcontrol_new msm_snd_controls[] = {
@@ -1071,6 +1149,12 @@ static const struct snd_kcontrol_new msm_snd_controls[] = {
 			msm_vi_feed_tx_ch_get, msm_vi_feed_tx_ch_put),
 	SOC_ENUM_EXT("MI2S_RX SampleRate", msm_snd_enum[6],
 			mi2s_rx_sample_rate_get, mi2s_rx_sample_rate_put),
+/*  +Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
+#ifdef  CONFIG_ARCH_MSM8937
+    SOC_ENUM_EXT("headset amp", msm_snd_enum[7],
+            headset_status_get, headset_status_put),
+#endif
+/*  -Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
 };
 
 static int msm8952_enable_wsa_mclk(struct snd_soc_card *card, bool enable)
@@ -1542,12 +1626,32 @@ static void *def_msm8952_wcd_mbhc_cal(void)
 	 */
 	btn_low[0] = 75;
 	btn_high[0] = 75;
+//+bug 603257,zhouweijie.wt,modify,20201203,change headset button threshold for volume up/down
+#ifdef CONFIG_ARCH_MSM8953
+	btn_low[1] = 225;
+	btn_high[1] = 225;
+	btn_low[2] = 450;
+	btn_high[2] = 450;
+	btn_low[3] = 500;
+	btn_high[3] = 500;
+/* +Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
+#elif defined CONFIG_ARCH_MSM8937
+    btn_low[1] = 225;
+    btn_high[1] = 225;
+    btn_low[2] = 450;
+    btn_high[2] = 450;
+    btn_low[3] = 500;
+    btn_high[3] = 500;
+/* -Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
+#else
 	btn_low[1] = 150;
 	btn_high[1] = 150;
 	btn_low[2] = 225;
 	btn_high[2] = 225;
 	btn_low[3] = 450;
 	btn_high[3] = 450;
+#endif
+//-bug 603257,zhouweijie.wt,modify,20201203,change headset button threshold for volume up/down
 	btn_low[4] = 500;
 	btn_high[4] = 500;
 
@@ -3259,6 +3363,63 @@ parse_mclk_freq:
 		dev_err(&pdev->dev, "Headset is using internal micbias\n");
 		mbhc_cfg.hs_ext_micbias = false;
 	}
+//+Bug 603257, zhouweijie.wt, add , 20201130, add for mbhc adc detect
+#ifdef  CONFIG_ARCH_MSM8953	
+	ret = of_property_read_u32(pdev->dev.of_node, "qcom,channel-num", &mbhc_cfg.adc_channel);
+	if (!ret) {
+		if (mbhc_cfg.adc_channel < 0 || mbhc_cfg.adc_channel >= ADC_MAX_NUM) {
+			dev_err(&pdev->dev,
+				"%s: invalid qcom,channel-num=%d specified\n",
+				__func__, mbhc_cfg.adc_channel);
+		} else {
+			mbhc_cfg.vadc_dev = qpnp_get_vadc(&pdev->dev,
+							"hph_mic");
+			if (IS_ERR(mbhc_cfg.vadc_dev)) {
+				ret = PTR_ERR(mbhc_cfg.vadc_dev);
+				if (ret != -EPROBE_DEFER)
+					pr_err("vadc property missing\n");
+			}
+		}
+	}
+#endif
+//-Bug 603257, zhouweijie.wt, add , 20201130, add for mbhc adc detect
+/*  +Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
+#ifdef CONFIG_ARCH_MSM8937
+    mbhc_cfg.hph_en_gpio = of_get_named_gpio(pdev->dev.of_node,
+                            "qcom,hph-en-gpio", 0);
+
+    mbhc_cfg.hph_in_gpio = of_get_named_gpio(pdev->dev.of_node,
+                            "qcom,hph-in-gpio", 0);
+    if (gpio_is_valid(mbhc_cfg.hph_en_gpio)) {
+        gpio_request(mbhc_cfg.hph_en_gpio, "hph-en");
+    } else {
+        dev_err(&pdev->dev, "%s: error! hph_en_gpio is :%d\n", __func__, mbhc_cfg.hph_en_gpio);
+    }
+    if (gpio_is_valid(mbhc_cfg.hph_in_gpio)) {
+        gpio_request(mbhc_cfg.hph_in_gpio, "hph-in");
+    } else {
+        dev_err(&pdev->dev, "%s: error! hph_in_gpio is :%d\n", __func__, mbhc_cfg.hph_in_gpio);
+    }
+/* +Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
+    ret = of_property_read_u32(pdev->dev.of_node, "qcom,channel-num", &mbhc_cfg.adc_channel);
+    if (!ret) {
+        if (mbhc_cfg.adc_channel < 0 || mbhc_cfg.adc_channel >= ADC_MAX_NUM) {
+            dev_err(&pdev->dev,
+                    "%s: invalid qcom,channel-num=%d specified\n",
+                    __func__, mbhc_cfg.adc_channel);
+        } else {
+            mbhc_cfg.vadc_dev = qpnp_get_vadc(&pdev->dev,
+                    "hph_mic");
+            if (IS_ERR(mbhc_cfg.vadc_dev)) {
+                ret = PTR_ERR(mbhc_cfg.vadc_dev);
+                if (ret != -EPROBE_DEFER)
+                    pr_err("vadc property missing\n");
+            }
+        }
+    }
+/* -Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
+#endif
+/*  -Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
 
 	ret = of_property_read_u32(pdev->dev.of_node,
 				  "qcom,msm-afe-clk-ver", &val);

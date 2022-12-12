@@ -63,6 +63,44 @@ enum pon_restart_reason {
 	/* 32 ~ 63 for OEMs/ODMs secific features */
 	PON_RESTART_REASON_OEM_MIN		= 0x20,
 	PON_RESTART_REASON_OEM_MAX		= 0x3f,
+/* CONFIG_SEC_BSP */
+	PON_RESTART_REASON_FORCE_UPLOAD_ON      = 0x10,
+        PON_RESTART_REASON_FORCE_UPLOAD_OFF     = 0x11,
+        PON_RESTART_REASON_MANUAL_RESET = 0x13,
+        PON_RESTART_REASON_NORMALBOOT           = 0x14,
+        PON_RESTART_REASON_DOWNLOAD             = 0x15,
+        PON_RESTART_REASON_NVBACKUP             = 0x16,
+        PON_RESTART_REASON_NVRESTORE            = 0x17,
+        PON_RESTART_REASON_NVERASE              = 0x18,
+        PON_RESTART_REASON_NVRECOVERY           = 0x19,
+#ifdef CONFIG_SEC_PERIPHERAL_SECURE_CHK
+        PON_RESTART_REASON_SECURE_CHECK_FAIL    = 0x1A,
+#endif
+        PON_RESTART_REASON_WATCH_DOG            = 0x1B,
+        PON_RESTART_REASON_KERNEL_PANIC         = 0x1C,
+        PON_RESTART_REASON_THERMAL              = 0x1D,
+        PON_RESTART_REASON_POWER_RESET          = 0x1E,
+        PON_RESTART_REASON_WTSR                 = 0x1F,
+/***********************************************/
+        PON_RESTART_REASON_RORY_START           = 0x20,
+   /* here is reserved for rory download. */
+   /* don't use betwwen PON_RESTART_REASON_RORY_START */
+   /*   & PON_RESTART_REASON_RORY_END */
+        PON_RESTART_REASON_RORY_END             = 0x2A,
+/***********************************************/
+        PON_RESTART_REASON_CROSS_FAIL = 0x2C,
+        PON_RESTART_REASON_SLT_COMPLETE = 0x2F,
+        PON_RESTART_REASON_DBG_LOW              = 0x30,
+        PON_RESTART_REASON_DBG_MID              = 0x31,
+        PON_RESTART_REASON_DBG_HIGH             = 0x32,
+        PON_RESTART_REASON_CP_DBG_ON            = 0x33,
+        PON_RESTART_REASON_CP_DBG_OFF           = 0x34,
+        PON_RESTART_REASON_CP_MEM_RESERVE_ON    = 0x35,
+        PON_RESTART_REASON_CP_MEM_RESERVE_OFF   = 0x36,
+        PON_RESTART_REASON_FIRMWAREUPDATE       = 0x37,
+        PON_RESTART_REASON_MBS_MEM_RESERVE_ON   = 0x3E,
+        PON_RESTART_REASON_MBS_MEM_RESERVE_OFF  = 0x3F,
+        PON_RESTART_REASON_MAX                  = 0x40
 };
 
 #ifdef CONFIG_INPUT_QPNP_POWER_ON

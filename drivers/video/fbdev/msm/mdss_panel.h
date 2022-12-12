@@ -34,6 +34,14 @@ enum fps_resolution {
 	FPS_RESOLUTION_KHZ,
 };
 
+//+bug 600732, wangcong.wt, modify, 2020/11/11, Modify ft8006p tianma timming sequence
+enum {
+	UNKNOWN_PANEL,
+	ILI9881H_TRULY_HDP_VIDEO_PANEL,
+	FT8006P_TIANMA_HDP_VIDEO_PANEL,
+};
+//-bug 600732, wangcong.wt, modify, 2020/11/11, Modify ft8006p tianma timming sequence
+
 #define DEFAULT_FRAME_RATE	60
 #define DEFAULT_ROTATOR_FRAME_RATE 120
 #define ROTATOR_LOW_FRAME_RATE 30
@@ -651,6 +659,10 @@ struct mdss_panel_info {
 	u32 out_format;
 	u32 rst_seq[MDSS_DSI_RST_SEQ_LEN];
 	u32 rst_seq_len;
+	//+bug 600732, wangcong.wt, modify, 2020/11/11, Modify ft8006p tianma timming sequence
+	u32 panel_name_id;
+    u32 first_on_backlight;
+	//-bug 600732, wangcong.wt, modify, 2020/11/11, Modify ft8006p tianma timming sequence
 	u32 vic; /* video identification code */
 	struct mdss_rect roi;
 	int pwm_pmic_gpio;
@@ -782,6 +794,10 @@ struct mdss_panel_info {
 
 	/* HDR properties of display panel*/
 	struct mdss_panel_hdr_properties hdr_properties;
+	//+bug 600732, wangcong.wt, add, 2020/11/11, Add Lcd backlight map
+	int blmap_size;
+	int *blmap;
+	//+bug 600732, wangcong.wt, add, 2020/11/11, Add Lcd backlight map
 };
 
 struct mdss_panel_timing {

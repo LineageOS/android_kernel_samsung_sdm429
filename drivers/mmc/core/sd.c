@@ -1327,7 +1327,6 @@ static int _mmc_sd_resume(struct mmc_host *host)
 
 	if (host->ops->get_cd && !host->ops->get_cd(host)) {
 		err = -ENOMEDIUM;
-		mmc_card_clr_suspended(host->card);
 		goto out;
 	}
 
@@ -1360,7 +1359,6 @@ static int _mmc_sd_resume(struct mmc_host *host)
 	} else if (err) {
 		goto out;
 	}
-	mmc_card_clr_suspended(host->card);
 
 	if (host->card->sdr104_blocked)
 		goto out;
@@ -1372,6 +1370,7 @@ static int _mmc_sd_resume(struct mmc_host *host)
 	}
 
 out:
+	mmc_card_clr_suspended(host->card);
 	mmc_release_host(host);
 	return err;
 }

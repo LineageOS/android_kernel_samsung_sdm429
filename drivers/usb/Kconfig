@@ -101,6 +101,9 @@ source "drivers/usb/image/Kconfig"
 
 source "drivers/usb/usbip/Kconfig"
 
+#bug433318, zhaobeilong@wt, 20180409, add usb disable node
+source "drivers/usb/notify/Kconfig"
+
 endif
 
 source "drivers/usb/musb/Kconfig"
@@ -112,6 +115,9 @@ source "drivers/usb/dwc2/Kconfig"
 source "drivers/usb/chipidea/Kconfig"
 
 source "drivers/usb/isp1760/Kconfig"
+
+#Bug 558309, lizerong.wt, 20200522, add, add usb_notify node
+source "drivers/usb/notify/Kconfig"
 
 source "drivers/usb/pd/Kconfig"
 
@@ -159,6 +165,10 @@ endif # USB
 source "drivers/usb/phy/Kconfig"
 
 source "drivers/usb/gadget/Kconfig"
+
+source "drivers/usb/typec/Kconfig"
+
+source "drivers/usb/pd/Kconfig"
 
 config USB_LED_TRIG
 	bool "USB LED Triggers"

@@ -21,6 +21,9 @@
 #include <linux/irqdesc.h>
 
 #include "power.h"
+#ifdef CONFIG_SEC_PM
+#include <linux/wakeup_reason.h>
+#endif
 
 /*
  * If set, the suspend/hibernate code will abort transitions to a sleep state
@@ -917,11 +920,14 @@ void pm_wakeup_clear(void)
 
 void pm_system_irq_wakeup(unsigned int irq_number)
 {
+#ifndef CONFIG_SEC_PM
 	struct irq_desc *desc;
 	const char *name = "null";
+#endif
 
 	if (pm_wakeup_irq == 0) {
 		if (msm_show_resume_irq_mask) {
+#ifndef CONFIG_SEC_PM
 			desc = irq_to_desc(irq_number);
 			if (desc == NULL)
 				name = "stray irq";
@@ -930,7 +936,9 @@ void pm_system_irq_wakeup(unsigned int irq_number)
 
 			pr_warn("%s: %d triggered %s\n", __func__,
 					irq_number, name);
-
+#else
+			log_wakeup_reason(irq_number);
+#endif
 		}
 		pm_wakeup_irq = irq_number;
 		pm_system_wakeup();

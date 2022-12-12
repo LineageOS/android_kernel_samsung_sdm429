@@ -255,9 +255,7 @@ enum msm_camera_i2c_operation {
 	MSM_CAM_WRITE = 0,
 	MSM_CAM_POLL,
 	MSM_CAM_READ,
-#define MSM_CAM_READ_LOOP \
-	MSM_CAM_READ_LOOP
-	MSM_CAM_READ_LOOP = 3,
+	MSM_CAM_SINGLE_LOOP_READ,//bug 600732,huangguoyong.wt, add,2020/11/16,86118 project camera kernel code for bring up(add loop read ops)
 };
 
 struct msm_sensor_i2c_sync_params {

@@ -33,6 +33,12 @@
 #include <soc/qcom/watchdog.h>
 #include <linux/dma-mapping.h>
 
+#ifdef CONFIG_SEC_DEBUG
+#include <linux/sec_bsp.h>
+#include <linux/sec_debug.h>
+#include <linux/sec_debug_summary.h>
+#endif
+
 #define MODULE_NAME "msm_watchdog"
 #define WDT0_ACCSCSSNBARK_INT 0
 #define TCSR_WDT_CFG	0x30
@@ -93,8 +99,16 @@ struct msm_watchdog_data {
 
 	bool timer_expired;
 	bool user_pet_complete;
+	unsigned long long timer_fired;
+	unsigned long long thread_start;
+	unsigned long long ping_start[NR_CPUS];
+	unsigned long long ping_end[NR_CPUS];
 	unsigned int scandump_size;
 };
+
+#ifdef CONFIG_SEC_DEBUG
+static void __iomem * wdog_base_addr;
+#endif
 
 /*
  * On the kernel command line specify
@@ -347,9 +361,25 @@ static ssize_t wdog_pet_time_get(struct device *dev,
 
 static DEVICE_ATTR(pet_time, S_IRUSR, wdog_pet_time_get, NULL);
 
+#ifdef CONFIG_SEC_DEBUG
+static unsigned long long last_emerg_pet;
+
+void emerg_pet_watchdog(void)
+{
+	if (wdog_base_addr && enable) {
+		__raw_writel(1, wdog_base_addr + WDT0_EN);
+		__raw_writel(1, wdog_base_addr + WDT0_RST);
+
+		mb();
+		last_emerg_pet = sched_clock();
+	}
+}
+EXPORT_SYMBOL(emerg_pet_watchdog);
+#endif
+
 static void pet_watchdog(struct msm_watchdog_data *wdog_dd)
 {
-	int slack, i, count, prev_count = 0;
+	int slack, i, count, prev_count = 0, last_count = 0;
 	unsigned long long time_ns;
 	unsigned long long slack_ns;
 	unsigned long long bark_time_ns = wdog_dd->bark_time * 1000000ULL;
@@ -370,6 +400,18 @@ static void pet_watchdog(struct msm_watchdog_data *wdog_dd)
 	if (slack_ns < wdog_dd->min_slack_ns)
 		wdog_dd->min_slack_ns = slack_ns;
 	wdog_dd->last_pet = time_ns;
+#ifdef CONFIG_SEC_DEBUG
+	last_count = count;
+
+	pr_err("[%s] last_count : %x, new_count : %x, bark_time : %x, "
+	       "bite_time : %x\n", __func__, last_count, count,
+	       __raw_readl(wdog_dd->base + WDT0_BARK_TIME),
+	       __raw_readl(wdog_dd->base + WDT0_BITE_TIME));
+	sec_debug_save_last_pet(time_ns);
+#endif
+#ifdef CONFIG_SEC_DEBUG_PWDT
+	sec_debug_check_pwdt();
+#endif
 }
 
 static void keep_alive_response(void *info)
@@ -378,6 +420,7 @@ static void keep_alive_response(void *info)
 	struct msm_watchdog_data *wdog_dd = (struct msm_watchdog_data *)info;
 
 	cpumask_set_cpu(cpu, &wdog_dd->alive_mask);
+	wdog_dd->ping_end[cpu] = sched_clock();
 	/* Make sure alive mask is cleared and set in order */
 	smp_mb();
 }
@@ -395,8 +438,11 @@ static void ping_other_cpus(struct msm_watchdog_data *wdog_dd)
 	smp_mb();
 	for_each_cpu(cpu, cpu_online_mask) {
 		if (!cpu_idle_pc_state[cpu] && !cpu_isolated(cpu))
+		{
+			wdog_dd->ping_start[cpu] = sched_clock();
 			smp_call_function_single(cpu, keep_alive_response,
 						 wdog_dd, 1);
+		}
 	}
 }
 
@@ -405,6 +451,7 @@ static void pet_task_wakeup(unsigned long data)
 	struct msm_watchdog_data *wdog_dd =
 		(struct msm_watchdog_data *)data;
 	wdog_dd->timer_expired = true;
+	wdog_dd->timer_fired = sched_clock();
 	wake_up(&wdog_dd->pet_complete);
 }
 
@@ -414,6 +461,7 @@ static __ref int watchdog_kthread(void *arg)
 		(struct msm_watchdog_data *)arg;
 	unsigned long delay_time = 0;
 	struct sched_param param = {.sched_priority = MAX_RT_PRIO-1};
+	int cpu;
 
 	sched_setscheduler(current, SCHED_FIFO, &param);
 	while (!kthread_should_stop()) {
@@ -421,6 +469,10 @@ static __ref int watchdog_kthread(void *arg)
 			wdog_dd->pet_complete,
 			wdog_dd->timer_expired) != 0)
 			;
+		
+		wdog_dd->thread_start = sched_clock();
+		for_each_cpu(cpu, cpu_present_mask)
+			wdog_dd->ping_start[cpu] = wdog_dd->ping_end[cpu] = 0;
 
 		if (wdog_dd->do_ipi_ping)
 			ping_other_cpus(wdog_dd);
@@ -518,6 +570,10 @@ static irqreturn_t wdog_bark_handler(int irq, void *dev_id)
 	unsigned long nanosec_rem;
 	unsigned long long t = sched_clock();
 
+#ifdef CONFIG_SEC_DEBUG
+	sec_debug_prepare_for_wdog_bark_reset();
+#endif
+
 	nanosec_rem = do_div(t, 1000000000);
 	dev_info(wdog_dd->dev, "Watchdog bark! Now = %lu.%06lu\n",
 			(unsigned long) t, nanosec_rem / 1000);
@@ -557,9 +613,22 @@ static void configure_bark_dump(struct msm_watchdog_data *wdog_dd)
 	if (!cpu_buf)
 		goto out1;
 
+#ifdef CONFIG_SEC_DEBUG
+	sec_debug_summary_bark_dump((unsigned long)cpu_data,
+				(unsigned long)virt_to_phys(cpu_data),
+				(unsigned long)cpu_buf,
+				(unsigned long)virt_to_phys(cpu_buf),
+				MAX_CPU_CTX_SIZE);
+#endif
+
 	for_each_cpu(cpu, cpu_present_mask) {
 		cpu_data[cpu].addr = virt_to_phys(cpu_buf +
 						cpu * MAX_CPU_CTX_SIZE);
+#ifdef CONFIG_SEC_DEBUG
+		pr_info("WDOG_V2 handled by TZ: for cpu[%d] PA:0x%llx @0x%lx\n",
+				 cpu, cpu_data[cpu].addr,
+				(unsigned long)(cpu_buf + cpu * MAX_CPU_CTX_SIZE));
+#endif
 		cpu_data[cpu].len = MAX_CPU_CTX_SIZE;
 		snprintf(cpu_data[cpu].name, sizeof(cpu_data[cpu].name),
 			"KCPU_CTX%d", cpu);
@@ -753,6 +822,10 @@ static void init_watchdog_data(struct msm_watchdog_data *wdog_dd)
 	wdog_dd->last_pet = sched_clock();
 	wdog_dd->enabled = true;
 
+#ifdef CONFIG_SEC_DEBUG
+	sec_debug_save_last_pet(wdog_dd->last_pet);
+#endif
+
 	init_watchdog_sysfs(wdog_dd);
 
 	if (wdog_dd->irq_ppi)
@@ -775,6 +848,19 @@ static void dump_pdata(struct msm_watchdog_data *pdata)
 	dev_dbg(pdata->dev, "wdog base address is 0x%lx\n", (unsigned long)
 								pdata->base);
 }
+
+#ifdef CONFIG_USER_RESET_DEBUG_TEST
+void force_watchdog_bark(void)
+{
+	u64 timeout;
+
+	wdog_data->bark_time = 3000;
+	timeout = (wdog_data->bark_time * WDT_HZ)/1000;
+	__raw_writel(timeout, wdog_data->base + WDT0_BARK_TIME);
+	pr_err("%s force set bark time [%d]\n", __func__, wdog_data->bark_time);
+}
+EXPORT_SYMBOL(force_watchdog_bark);
+#endif
 
 static int msm_wdog_dt_to_pdata(struct platform_device *pdev,
 					struct msm_watchdog_data *pdata)
@@ -802,6 +888,10 @@ static int msm_wdog_dt_to_pdata(struct platform_device *pdev,
 				__func__);
 		return -ENXIO;
 	}
+
+#ifdef CONFIG_SEC_DEBUG
+	wdog_base_addr = pdata->base;
+#endif
 
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
 					   "wdt-absent-base");

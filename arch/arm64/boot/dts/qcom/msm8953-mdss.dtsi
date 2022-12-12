@@ -306,8 +306,12 @@
 
 			qcom,timing-db-mode;
 			qcom,mdss-mdp = <&mdss_mdp>;
-			vdd-supply = <&pm8953_l17>;
+			//+bug 600732, wangcong.wt, modify, 2020/11/11, modify power supply
+			//vdd-supply = <&pm8953_l17>;
 			vddio-supply = <&pm8953_l6>;
+			lab-supply = <&lcdb_ldo_vreg>;
+			ibb-supply = <&lcdb_ncp_vreg>;
+			//-bug 600732, wangcong.wt, modify, 2020/11/11, modify power supply
 
 			clocks = <&clock_gcc_mdss clk_gcc_mdss_byte0_clk>,
 				<&clock_gcc_mdss clk_gcc_mdss_pclk0_clk>,

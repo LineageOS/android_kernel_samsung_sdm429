@@ -350,6 +350,7 @@ static int l3_clk_set_rate(struct clk_hw *hw, unsigned long rate,
 		return -ETIMEDOUT;
 	}
 	cpuclk->rate = rate;
+
 	return 0;
 }
 
@@ -715,6 +716,7 @@ osm_cpufreq_target_index(struct cpufreq_policy *policy, unsigned int index)
 	struct clk_osm *c = policy->driver_data;
 
 	osm_set_index(c, index);
+
 	return 0;
 }
 

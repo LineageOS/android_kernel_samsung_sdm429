@@ -139,6 +139,10 @@ struct qusb_phy {
 	int			vdd_levels[3]; /* none, low, high */
 	int			init_seq_len;
 	int			*qusb_phy_init_seq;
+	//+bug 72645, jinyushun.wt, add, 20201125, add usb host eye tune para
+	int			host_init_seq_len;
+	int			*qusb_phy_host_init_seq;
+	//-bug 72645, jinyushun.wt, add, 20201125, add usb host eye tune para
 	u32			major_rev;
 
 	u32			tune2_val;
@@ -248,8 +252,11 @@ static int qusb_phy_enable_power(struct qusb_phy *qphy, bool on)
 		return 0;
 	}
 
-	if (!on)
+	if (!on) {
+		dev_err(qphy->phy.dev, "%s turn off regulators skip!!!\n",__func__);
+		return ret;
 		goto disable_vdda33;
+	}
 
 	ret = qusb_phy_config_vdd(qphy, true);
 	if (ret) {
@@ -500,9 +507,15 @@ static int qusb_phy_init(struct usb_phy *phy)
 	if (qphy->ref_clk_base)
 		reset_val = readl_relaxed(qphy->base + QUSB2PHY_PLL_TEST);
 
-	if (qphy->qusb_phy_init_seq)
-		qusb_phy_write_seq(qphy->base, qphy->qusb_phy_init_seq,
-				qphy->init_seq_len, 0);
+	//+bug 72645, jinyushun.wt, add, 20201125, add usb host eye tune para
+	if(qphy->phy.flags & PHY_HOST_MODE) {
+		if (qphy->qusb_phy_host_init_seq)
+			qusb_phy_write_seq(qphy->base, qphy->qusb_phy_host_init_seq,qphy->host_init_seq_len, 0);
+	} else {
+		if (qphy->qusb_phy_init_seq)
+			qusb_phy_write_seq(qphy->base, qphy->qusb_phy_init_seq,qphy->init_seq_len, 0);
+	}
+	//-bug 72645, jinyushun.wt, add, 20201125, add usb host eye tune para
 
 	/*
 	 * Check for EFUSE value only if tune2_efuse_reg is available
@@ -1138,6 +1151,30 @@ static int qusb_phy_probe(struct platform_device *pdev)
 			dev_err(dev, "error allocating memory for phy_init_seq\n");
 		}
 	}
+
+	//+bug 72645, jinyushun.wt, add, 20201125, add usb host eye tune para
+	size = 0;
+	of_get_property(dev->of_node, "qcom,qusb-phy-host-init-seq", &size);
+	if (size) {
+		qphy->qusb_phy_host_init_seq = devm_kzalloc(dev,
+						size, GFP_KERNEL);
+		if (qphy->qusb_phy_host_init_seq) {
+			qphy->host_init_seq_len =
+				(size / sizeof(*qphy->qusb_phy_host_init_seq));
+			if (qphy->host_init_seq_len % 2) {
+				dev_err(dev, "invalid host_init_seq_len\n");
+				return -EINVAL;
+			}
+
+			of_property_read_u32_array(dev->of_node,
+				"qcom,qusb-phy-host-init-seq",
+				qphy->qusb_phy_host_init_seq,
+				qphy->host_init_seq_len);
+		} else {
+			dev_err(dev, "error allocating memory for phy_host_init_seq\n");
+		}
+	}
+	//-bug 72645, jinyushun.wt, add, 20201125, add usb host eye tune para
 
 	qphy->ulpi_mode = false;
 	ret = of_property_read_string(dev->of_node, "phy_type", &phy_type);

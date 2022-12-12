@@ -13,18 +13,18 @@ config PSTORE
 	   say N.
 
 choice
-        prompt "Choose compression algorithm"
-        depends on PSTORE
-        default PSTORE_ZLIB_COMPRESS
-        help
-          This option chooses compression algorithm.
+	prompt "Choose compression algorithm"
+	depends on PSTORE
+	default PSTORE_ZLIB_COMPRESS
+	help
+	  This option chooses compression algorithm.
 
 config PSTORE_ZLIB_COMPRESS
-        bool "ZLIB"
-        select ZLIB_DEFLATE
-        select ZLIB_INFLATE
-        help
-          This option enables ZLIB compression algorithm support.
+	bool "ZLIB"
+	select ZLIB_DEFLATE
+	select ZLIB_INFLATE
+	help
+	  This option enables ZLIB compression algorithm support.
 
 config PSTORE_LZO_COMPRESS
         bool "LZO"
@@ -57,6 +57,20 @@ config PSTORE_PMSG
 	  data can be retrieved from /sys/fs/pstore/pmsg-ramoops-[ID].
 
 	  If unsure, say N.
+
+config PSTORE_PMSG_SSPLOG
+	bool "Log user space messages for SS Platform log"
+	depends on PSTORE_PMSG
+	select SEC_EVENT_LOG
+	help
+	  When the option is enabled, pmsg will save log at reserved
+	  dram area.
+
+	  If unsure, say N.
+
+config SEC_EVENT_LOG
+	bool "Enable Event log parser"
+	default n
 
 config PSTORE_FTRACE
 	bool "Persistent function tracer"

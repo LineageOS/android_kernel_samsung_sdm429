@@ -31,7 +31,13 @@
 #include "mdss_panel.h"
 #include "mdss_mdp.h"
 
+//+Bug601075, shenwenbin.wt, modify, 20201230 mv N8_Q code to N8_R
+#ifdef CONFIG_ARCH_MSM8937
+#define STATUS_CHECK_INTERVAL_MS 2000 //bug609857 , sheqihao.wt, add, 20201222 test  ili9881c-jh panel esd issuse
+#else
 #define STATUS_CHECK_INTERVAL_MS 5000
+#endif
+//-Bug601075, shenwenbin.wt, modify, 20201230 mv N8_Q code to N8_R
 #define STATUS_CHECK_INTERVAL_MIN_MS 50
 #define DSI_STATUS_CHECK_INIT -1
 #define DSI_STATUS_CHECK_DISABLE 1

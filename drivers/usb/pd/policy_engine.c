@@ -28,6 +28,12 @@
 #include <linux/usb/class-dual-role.h>
 #include <linux/usb/usbpd.h>
 #include "usbpd.h"
+#if defined(CONFIG_USB_CCIC_NOTIFIER_USING_QC)
+#include <linux/usb/typec/pm6150/pm6150_typec.h>
+#endif
+#if defined(CONFIG_TYPEC)
+#include <linux/usb/typec.h>
+#endif
 
 /* To start USB stack for USB3.1 complaince testing */
 static bool usb_compliance_mode;
@@ -222,7 +228,7 @@ static void *usbpd_ipc_log;
 #define usbpd_dbg(dev, fmt, ...) do { \
 	ipc_log_string(usbpd_ipc_log, "%s: %s: " fmt, dev_name(dev), __func__, \
 			##__VA_ARGS__); \
-	dev_dbg(dev, fmt, ##__VA_ARGS__); \
+	dev_info(dev, fmt, ##__VA_ARGS__); \
 	} while (0)
 
 #define usbpd_info(dev, fmt, ...) do { \
@@ -234,7 +240,7 @@ static void *usbpd_ipc_log;
 #define usbpd_warn(dev, fmt, ...) do { \
 	ipc_log_string(usbpd_ipc_log, "%s: %s: " fmt, dev_name(dev), __func__, \
 			##__VA_ARGS__); \
-	dev_warn(dev, fmt, ##__VA_ARGS__); \
+	dev_info(dev, fmt, ##__VA_ARGS__); \
 	} while (0)
 
 #define usbpd_err(dev, fmt, ...) do { \
@@ -456,8 +462,20 @@ struct usbpd {
 	u8			next_tx_chunk;
 
 	struct mutex		swap_lock;
+#if defined(CONFIG_DUAL_ROLE_USB_INTF)
 	struct dual_role_phy_instance	*dual_role;
 	struct dual_role_phy_desc	dr_desc;
+#elif defined(CONFIG_TYPEC)
+	struct typec_port *port;
+	struct typec_partner *partner;
+	struct usb_pd_identity partner_identity;
+	struct typec_capability typec_cap;
+	struct completion typec_reverse_completion;
+	int typec_power_role;
+	int typec_data_role;
+	int typec_try_state_change;
+	int pwr_opmode;
+#endif
 	bool			send_pr_swap;
 	bool			send_dr_swap;
 
@@ -499,6 +517,9 @@ struct usbpd {
 	bool			send_get_battery_status;
 	u32			battery_sts_dobj;
 	bool			is_sxr_dp_sink;
+#if defined(CONFIG_USB_CCIC_NOTIFIER_USING_QC)	
+	struct pm6150_phydrv_data *phy_driver_data;
+#endif
 };
 
 static LIST_HEAD(_usbpd);	/* useful for debugging */
@@ -691,6 +712,10 @@ static int pd_send_msg(struct usbpd *pd, u8 msg_type, const u32 *data,
 	int ret;
 	u16 hdr;
 
+#if defined(CONFIG_USB_CCIC_NOTIFIER_USING_QC)
+	usbpd_info(&pd->dev, "pd_send_msg sending %s\n",
+		msg_to_string(msg_type, num_data, false));
+#endif
 	if (pd->hard_reset_recvd)
 		return -EBUSY;
 
@@ -1216,6 +1241,10 @@ static void usbpd_set_state(struct usbpd *pd, enum usbpd_state next_state)
 	union power_supply_propval val = {0};
 	unsigned long flags;
 	int ret;
+#if defined(CONFIG_TYPEC)
+	struct typec_partner_desc desc;
+	enum typec_pwr_opmode mode = TYPEC_PWR_MODE_USB;
+#endif
 
 	if (pd->hard_reset_recvd) /* let usbpd_sm handle it */
 		return;
@@ -1223,6 +1252,11 @@ static void usbpd_set_state(struct usbpd *pd, enum usbpd_state next_state)
 	usbpd_dbg(&pd->dev, "%s -> %s\n",
 			usbpd_state_strings[pd->current_state],
 			usbpd_state_strings[next_state]);
+#if defined(CONFIG_USB_CCIC_NOTIFIER_USING_QC)
+	usbpd_info(&pd->dev, "%s: %s -> %s, current_pr(%d) current_dr(%d)\n",
+			__func__, usbpd_state_strings[pd->current_state],
+			usbpd_state_strings[next_state], pd->current_pr, pd->current_dr);
+#endif
 
 	pd->current_state = next_state;
 
@@ -1246,13 +1280,33 @@ static void usbpd_set_state(struct usbpd *pd, enum usbpd_state next_state)
 		break;
 
 	case PE_SRC_STARTUP:
+#if defined(CONFIG_USB_CCIC_NOTIFIER_USING_QC)
+		usbpd_info(&pd->dev, "%s: next_state(%d), current_dr(%d)\n",
+			__func__, next_state, pd->current_dr);
+#endif
 		if (pd->current_dr == DR_NONE) {
 			pd->current_dr = DR_DFP;
 			start_usb_host(pd, true);
 			pd->ss_lane_svid = 0x0;
 		}
 
+#if defined(CONFIG_DUAL_ROLE_USB_INTF)
 		dual_role_instance_changed(pd->dual_role);
+#elif defined(CONFIG_TYPEC)
+		if (pd->partner == NULL) {
+			pd->typec_power_role = TYPEC_SOURCE;
+			pd->typec_data_role = TYPEC_HOST;
+			pd->pwr_opmode = TYPEC_PWR_MODE_USB;
+			typec_set_pwr_opmode(pd->port, pd->pwr_opmode);
+			desc.usb_pd = mode == TYPEC_PWR_MODE_PD;
+			desc.accessory = TYPEC_ACCESSORY_NONE; /* XXX: handle accessories */
+			desc.identity = NULL;
+			typec_set_pwr_role(pd->port, pd->typec_power_role);
+			typec_set_data_role(pd->port, pd->typec_data_role);
+			usbpd_info(&pd->dev, "%s: typec_register_partner", __func__);
+			pd->partner = typec_register_partner(pd->port, &desc);
+		}
+#endif
 
 		/* Set CC back to DRP toggle for the next disconnect */
 		val.intval = POWER_SUPPLY_TYPEC_PR_DUAL;
@@ -1374,7 +1428,14 @@ static void usbpd_set_state(struct usbpd *pd, enum usbpd_state next_state)
 
 		kobject_uevent(&pd->dev.kobj, KOBJ_CHANGE);
 		complete(&pd->is_ready);
+#if defined(CONFIG_DUAL_ROLE_USB_INTF)
 		dual_role_instance_changed(pd->dual_role);
+#elif defined(CONFIG_TYPEC)
+			pd->typec_power_role = TYPEC_SOURCE;
+			typec_set_pwr_role(pd->port, pd->typec_power_role);
+			pd->pwr_opmode = TYPEC_PWR_MODE_PD;
+			typec_set_pwr_opmode(pd->port, pd->pwr_opmode);
+#endif
 		break;
 
 	case PE_SRC_HARD_RESET:
@@ -1414,7 +1475,23 @@ static void usbpd_set_state(struct usbpd *pd, enum usbpd_state next_state)
 				start_usb_peripheral(pd);
 		}
 
+#if defined(CONFIG_DUAL_ROLE_USB_INTF)
 		dual_role_instance_changed(pd->dual_role);
+#elif defined(CONFIG_TYPEC)
+		if (pd->partner == NULL) {
+			pd->typec_power_role = TYPEC_SINK;
+			pd->typec_data_role = TYPEC_DEVICE;
+			pd->pwr_opmode = TYPEC_PWR_MODE_USB;
+			typec_set_pwr_opmode(pd->port, pd->pwr_opmode);
+			desc.usb_pd = mode == TYPEC_PWR_MODE_PD;
+			desc.accessory = TYPEC_ACCESSORY_NONE; /* XXX: handle accessories */
+			desc.identity = NULL;
+			typec_set_pwr_role(pd->port, pd->typec_power_role);
+			typec_set_data_role(pd->port, pd->typec_data_role);
+			usbpd_info(&pd->dev, "%s: typec_register_partner", __func__);
+			pd->partner = typec_register_partner(pd->port, &desc);
+		}
+#endif
 
 		ret = power_supply_get_property(pd->usb_psy,
 				POWER_SUPPLY_PROP_PD_ALLOWED, &val);
@@ -1520,15 +1597,30 @@ static void usbpd_set_state(struct usbpd *pd, enum usbpd_state next_state)
 
 		kobject_uevent(&pd->dev.kobj, KOBJ_CHANGE);
 		complete(&pd->is_ready);
+#if defined(CONFIG_DUAL_ROLE_USB_INTF)
 		dual_role_instance_changed(pd->dual_role);
+#elif defined(CONFIG_TYPEC)
+		pd->typec_power_role = TYPEC_SINK;
+		typec_set_pwr_role(pd->port, pd->typec_power_role);
+		pd->pwr_opmode = TYPEC_PWR_MODE_PD;
+		typec_set_pwr_opmode(pd->port, pd->pwr_opmode);
+#endif
 		break;
 
 	case PE_SNK_TRANSITION_TO_DEFAULT:
+#if defined(CONFIG_USB_CCIC_NOTIFIER_USING_QC)
+		usbpd_info(&pd->dev, "%s: next_state(%d), current_dr(%d)\n",
+			__func__, next_state, pd->current_dr);
+#endif
 		if (pd->current_dr != DR_UFP) {
 			stop_usb_host(pd);
 			start_usb_peripheral(pd);
 			pd->current_dr = DR_UFP;
 			pd_phy_update_roles(pd->current_dr, pd->current_pr);
+#if defined(CONFIG_TYPEC)
+			pd->typec_data_role = TYPEC_DEVICE;
+			typec_set_data_role(pd->port, pd->typec_data_role);
+#endif
 		}
 		if (pd->vconn_enabled) {
 			regulator_disable(pd->vconn);
@@ -2013,6 +2105,10 @@ static void dr_swap(struct usbpd *pd)
 {
 	reset_vdm_state(pd);
 	usbpd_dbg(&pd->dev, "dr_swap: current_dr(%d)\n", pd->current_dr);
+#if defined(CONFIG_USB_CCIC_NOTIFIER_USING_QC)
+	usbpd_info(&pd->dev, "%s: current_dr(%d), peer_usb_comm(%d)\n",
+		__func__, pd->current_dr, pd->peer_usb_comm);
+#endif
 
 	if (pd->current_dr == DR_DFP) {
 		stop_usb_host(pd);
@@ -2028,7 +2124,15 @@ static void dr_swap(struct usbpd *pd)
 	}
 
 	pd_phy_update_roles(pd->current_dr, pd->current_pr);
+#if defined(CONFIG_DUAL_ROLE_USB_INTF)
 	dual_role_instance_changed(pd->dual_role);
+#elif defined(CONFIG_TYPEC)
+	if (pd->current_dr == DR_UFP)
+		pd->typec_data_role = TYPEC_DEVICE;
+	else if (pd->current_dr == DR_DFP)
+		pd->typec_data_role = TYPEC_HOST;
+	typec_set_data_role(pd->port, pd->typec_data_role);
+#endif
 }
 
 
@@ -2109,6 +2213,10 @@ enable_reg:
 			break;
 		usleep_range(10000, 12000); /* Delay between two reads */
 	}
+#if defined(CONFIG_USB_CCIC_NOTIFIER_USING_QC)
+	usbpd_info(&pd->dev, "%s: count(%d), VBUS voltage(%d)\n",
+		__func__, count, val.intval);
+#endif
 
 	if (ret)
 		msleep(100); /* Delay to wait for VBUS ramp up if read fails */
@@ -2149,6 +2257,10 @@ static void usbpd_sm(struct work_struct *w)
 
 	usbpd_dbg(&pd->dev, "handle state %s\n",
 			usbpd_state_strings[pd->current_state]);
+#if defined(CONFIG_USB_CCIC_NOTIFIER_USING_QC)
+	usbpd_info(&pd->dev, "%s: handle state %s, current_pr(%d) current_dr(%d)\n",
+			__func__, usbpd_state_strings[pd->current_state], pd->current_pr, pd->current_dr);
+#endif
 
 	hrtimer_cancel(&pd->timer);
 	pd->sm_queued = false;
@@ -2206,6 +2318,10 @@ static void usbpd_sm(struct work_struct *w)
 		}
 
 		reset_vdm_state(pd);
+#if defined(CONFIG_USB_CCIC_NOTIFIER_USING_QC)
+		usbpd_info(&pd->dev, "%s: current_dr(%d), pd->forced_pr(%d)\n", __func__,
+			pd->current_dr, pd->forced_pr);
+#endif
 		if (pd->current_dr == DR_UFP)
 			stop_usb_peripheral(pd);
 		else if (pd->current_dr == DR_DFP)
@@ -2238,7 +2354,18 @@ static void usbpd_sm(struct work_struct *w)
 		pd->current_state = PE_UNKNOWN;
 
 		kobject_uevent(&pd->dev.kobj, KOBJ_CHANGE);
+#if defined(CONFIG_DUAL_ROLE_USB_INTF)
 		dual_role_instance_changed(pd->dual_role);
+#elif defined(CONFIG_TYPEC)
+		if (pd->partner) {
+			usbpd_info(&pd->dev, "%s: typec_unregister_partner", __func__);
+			if (!IS_ERR(pd->partner))
+				typec_unregister_partner(pd->partner);
+			pd->partner = NULL;
+			pd->typec_power_role = TYPEC_SINK;
+			pd->typec_data_role = TYPEC_DEVICE;
+		}
+#endif
 
 		if (pd->has_dp) {
 			pd->has_dp = false;
@@ -2459,6 +2586,10 @@ static void usbpd_sm(struct work_struct *w)
 		break;
 
 	case PE_SRC_TRANSITION_TO_DEFAULT:
+#if defined(CONFIG_USB_CCIC_NOTIFIER_USING_QC)
+		usbpd_info(&pd->dev, "%s: next_state(%s), current_dr(%d)\n",
+			__func__, usbpd_state_strings[pd->current_state], pd->current_dr);
+#endif
 		if (pd->vconn_enabled)
 			regulator_disable(pd->vconn);
 		pd->vconn_enabled = false;
@@ -2469,8 +2600,16 @@ static void usbpd_sm(struct work_struct *w)
 
 		if (pd->current_dr != DR_DFP) {
 			extcon_set_state_sync(pd->extcon, EXTCON_USB, 0);
+#if defined(CONFIG_USB_CCIC_NOTIFIER_USING_QC)
+			stop_usb_peripheral(pd);
+			start_usb_host(pd, true);
+#endif
 			pd->current_dr = DR_DFP;
 			pd_phy_update_roles(pd->current_dr, pd->current_pr);
+#if defined(CONFIG_TYPEC)
+			pd->typec_data_role = TYPEC_HOST;
+			typec_set_data_role(pd->port, pd->typec_data_role);
+#endif
 		}
 
 		/* PE_UNKNOWN will turn on VBUS and go back to PE_SRC_STARTUP */
@@ -2503,6 +2642,14 @@ static void usbpd_sm(struct work_struct *w)
 			if (pd->vbus_present)
 				usbpd_set_state(pd,
 						PE_SNK_WAIT_FOR_CAPABILITIES);
+#if defined(CONFIG_USB_CCIC_NOTIFIER_USING_QC)
+			usbpd_info(&pd->dev, "%s: send_pr_swap=%d, in_pr_swap=%d, typec_mode=%d\n",
+				__func__, pd->send_pr_swap, pd->in_pr_swap, pd->typec_mode);
+			if (pd->in_pr_swap && !pd->typec_mode) {
+				usbpd_set_state(pd, PE_ERROR_RECOVERY);
+				break;
+			}
+#endif
 
 			/*
 			 * Handle disconnection in the middle of PR_Swap.
@@ -3215,6 +3362,7 @@ static int psy_changed(struct notifier_block *nb, unsigned long evt, void *ptr)
 	return 0;
 }
 
+#if defined(CONFIG_DUAL_ROLE_USB_INTF)
 static enum dual_role_property usbpd_dr_properties[] = {
 	DUAL_ROLE_PROP_SUPPORTED_MODES,
 	DUAL_ROLE_PROP_MODE,
@@ -3432,6 +3580,198 @@ static int usbpd_dr_prop_writeable(struct dual_role_phy_instance *dual_role,
 
 	return 0;
 }
+#elif defined(CONFIG_TYPEC)
+static int usbpd_dr_set(const struct typec_capability *cap, enum typec_data_role role)
+{
+	struct usbpd *pd = container_of(cap, struct usbpd, typec_cap);
+	bool do_swap = false;
+
+	usbpd_info(&pd->dev, "%s, typec_power_role=%d, typec_data_role=%d, pd->current_dr=%d, Setting data_role to %d",
+		__func__, pd->typec_power_role, pd->typec_data_role, pd->current_dr, role);
+
+	if (pd->typec_data_role != TYPEC_DEVICE
+		&& pd->typec_data_role != TYPEC_HOST)
+		return -EPERM;
+	else if (pd->typec_data_role == role)
+		return -EPERM;
+
+	if (role == TYPEC_HOST) {
+		if (pd->current_dr == DR_UFP)
+			do_swap = true;
+	} else if (role == TYPEC_DEVICE) {
+		if (pd->current_dr == DR_DFP)
+			do_swap = true;
+	} else {
+		usbpd_warn(&pd->dev, "setting data_role to 'none' unsupported\n");
+		return -ENOTSUPP;
+	}
+
+	if (do_swap) {
+		if (pd->current_state != PE_SRC_READY &&
+				pd->current_state != PE_SNK_READY) {
+			usbpd_err(&pd->dev, "data_role swap not allowed: PD not in Ready state\n");
+			return -EAGAIN;
+		}
+
+		if (pd->current_state == PE_SNK_READY &&
+				!is_sink_tx_ok(pd)) {
+			usbpd_err(&pd->dev, "Rp indicates SinkTxNG\n");
+			return -EAGAIN;
+		}
+
+		mutex_lock(&pd->swap_lock);
+		reinit_completion(&pd->is_ready);
+		pd->send_dr_swap = true;
+
+		if (pd->current_state == PE_SRC_READY &&
+				!in_src_ams(pd))
+			start_src_ams(pd, true);
+		else
+			kick_sm(pd, 0);
+
+		/* wait for operation to complete */
+		if (!wait_for_completion_timeout(&pd->is_ready,
+				msecs_to_jiffies(100))) {
+			usbpd_err(&pd->dev, "data_role swap timed out\n");
+			mutex_unlock(&pd->swap_lock);
+			return -ETIMEDOUT;
+		}
+
+		mutex_unlock(&pd->swap_lock);
+
+		if ((role == TYPEC_HOST &&
+				pd->current_dr != DR_DFP) ||
+			(role == TYPEC_DEVICE &&
+				 pd->current_dr != DR_UFP)) {
+			usbpd_err(&pd->dev, "incorrect state (%s) after data_role swap\n",
+					pd->current_dr == DR_DFP ?
+					"dfp" : "ufp");
+			return -EPROTO;
+		}
+	}
+
+	return 0;
+}
+
+static int usbpd_pr_set(const struct typec_capability *cap, enum typec_role role)
+{
+	struct usbpd *pd = container_of(cap, struct usbpd, typec_cap);
+	bool do_swap = false;
+
+	usbpd_info(&pd->dev, "%s, typec_power_role=%d, typec_data_role=%d, pd->current_pr=%d, Setting power_role to %d",
+		__func__, pd->typec_power_role, pd->typec_data_role, pd->current_pr, role);
+
+	if (pd->typec_power_role != TYPEC_SINK
+	    && pd->typec_power_role != TYPEC_SOURCE)
+		return -EPERM;
+	else if (pd->typec_power_role == role)
+		return -EPERM;
+
+	if (role == TYPEC_SOURCE) {
+		if (pd->current_pr == PR_SINK)
+			do_swap = true;
+	} else if (role == TYPEC_SINK) {
+		if (pd->current_pr == PR_SRC)
+			do_swap = true;
+	} else {
+		usbpd_warn(&pd->dev, "setting power_role to 'none' unsupported\n");
+		return -ENOTSUPP;
+	}
+
+	if (do_swap) {
+		if (pd->current_state != PE_SRC_READY &&
+				pd->current_state != PE_SNK_READY) {
+			usbpd_err(&pd->dev, "power_role swap not allowed: PD not in Ready state\n");
+			return -EAGAIN;
+		}
+
+		if (pd->current_state == PE_SNK_READY &&
+				!is_sink_tx_ok(pd)) {
+			usbpd_err(&pd->dev, "Rp indicates SinkTxNG\n");
+			return -EAGAIN;
+		}
+
+		mutex_lock(&pd->swap_lock);
+		reinit_completion(&pd->is_ready);
+		pd->send_pr_swap = true;
+
+		if (pd->current_state == PE_SRC_READY &&
+				!in_src_ams(pd))
+			start_src_ams(pd, true);
+		else
+			kick_sm(pd, 0);
+
+		/* wait for operation to complete */
+		if (!wait_for_completion_timeout(&pd->is_ready,
+				msecs_to_jiffies(2000))) {
+			usbpd_err(&pd->dev, "power_role swap timed out\n");
+			mutex_unlock(&pd->swap_lock);
+			return -ETIMEDOUT;
+		}
+
+		mutex_unlock(&pd->swap_lock);
+
+		if ((role == TYPEC_SOURCE &&
+				pd->current_pr != PR_SRC) ||
+			(role == TYPEC_SINK &&
+				 pd->current_pr != PR_SINK)) {
+			usbpd_err(&pd->dev, "incorrect state (%s) after power_role swap\n",
+					pd->current_pr == PR_SRC ?
+					"source" : "sink");
+			return -EPROTO;
+		}
+	}
+
+	return 0;
+}
+
+static int usbpd_port_type_set(const struct typec_capability *cap, enum typec_port_type port_type)
+{
+	struct usbpd *pd = container_of(cap, struct usbpd, typec_cap);
+	union power_supply_propval val = {0};
+
+	usbpd_info(&pd->dev, "typec_power_role=%d, typec_data_role=%d, pwr_opmode=%d, port_type=%d",
+		pd->typec_power_role, pd->typec_data_role, pd->pwr_opmode, port_type);
+
+	usbpd_info(&pd->dev, "Setting mode to %d\n", port_type);
+
+	if (pd->pwr_opmode == TYPEC_PWR_MODE_PD) {
+		usbpd_info(&pd->dev, "invalid typec_role");
+		return 0;
+	}
+	/*
+	 * Forces disconnect on CC and re-establishes connection.
+	 * This does not use PD-based PR/DR swap
+	 */
+	if (port_type == TYPEC_PORT_UFP)
+		pd->forced_pr = POWER_SUPPLY_TYPEC_PR_SINK;
+	else if (port_type == TYPEC_PORT_DFP)
+		pd->forced_pr = POWER_SUPPLY_TYPEC_PR_SOURCE;
+	else {
+		val.intval = 0;
+		power_supply_set_property(pd->usb_psy,
+				POWER_SUPPLY_PROP_PR_SWAP, &val);
+		
+		val.intval = POWER_SUPPLY_TYPEC_PR_DUAL;
+		power_supply_set_property(pd->usb_psy,
+				POWER_SUPPLY_PROP_TYPEC_POWER_ROLE, &val);
+
+		pd->forced_pr = POWER_SUPPLY_TYPEC_PR_NONE;
+
+		pd->current_state = PE_UNKNOWN;
+		return 0;
+	}
+
+	/* new mode will be applied in disconnect handler */
+	set_power_role(pd, PR_NONE);
+
+	/* wait until it takes effect */
+	while (pd->forced_pr != POWER_SUPPLY_TYPEC_PR_NONE)
+		msleep(20);
+
+	return 0;
+}
+#endif
 
 static int usbpd_uevent(struct device *dev, struct kobj_uevent_env *env)
 {
@@ -4125,6 +4465,14 @@ struct usbpd *usbpd_create(struct device *parent)
 	pd->timer.function = pd_timeout;
 	mutex_init(&pd->swap_lock);
 	mutex_init(&pd->svid_handler_lock);
+#if defined(CONFIG_USB_CCIC_NOTIFIER_USING_QC)
+	pm6150_usbpd_create(&pd->dev, &pd->phy_driver_data);
+	if (pd->phy_driver_data == NULL) {
+		pr_info("%s : phy_driver_data is null!\n");
+	}		
+	INIT_DELAYED_WORK(&pd->phy_driver_data->acc_detach_handler,
+			usbpd_acc_detach_handler);
+#endif
 
 	pd->usb_psy = power_supply_get_by_name("usb");
 	if (!pd->usb_psy) {
@@ -4230,6 +4578,7 @@ struct usbpd *usbpd_create(struct device *parent)
 		pd->num_sink_caps = ARRAY_SIZE(default_snk_caps);
 	}
 
+#if defined(CONFIG_DUAL_ROLE_USB_INTF)
 	/*
 	 * Register the Android dual-role class (/sys/class/dual_role_usb/).
 	 * The first instance should be named "otg_default" as that's what
@@ -4253,7 +4602,31 @@ struct usbpd *usbpd_create(struct device *parent)
 	} else {
 		pd->dual_role->drv_data = pd;
 	}
+#elif defined(CONFIG_TYPEC)
+	pd->typec_cap.revision = USB_TYPEC_REV_1_2;
+	pd->typec_cap.pd_revision = 0x300;
+	pd->typec_cap.prefer_role = TYPEC_NO_PREFERRED_ROLE;
+	pd->typec_cap.pr_set = usbpd_pr_set;
+	pd->typec_cap.dr_set = usbpd_dr_set;
+	pd->typec_cap.port_type_set = usbpd_port_type_set;
 
+	pd->typec_cap.type = TYPEC_PORT_DRP;
+
+	pd->typec_power_role = TYPEC_SINK;
+	pd->typec_data_role = TYPEC_DEVICE;
+	pd->typec_try_state_change = TRY_ROLE_SWAP_NONE;
+	pd->pwr_opmode = TYPEC_PWR_MODE_USB;
+
+	pd->port = typec_register_port(&pd->dev, &pd->typec_cap);
+	if (IS_ERR(pd->port)) {
+		pr_err("unable to register typec_register_port\n");
+		goto put_psy;
+	}
+	else
+		usbpd_info(&pd->dev, "success typec_register_port");
+	pd->partner = NULL;
+	init_completion(&pd->typec_reverse_completion);
+#endif
 	pd->current_pr = PR_NONE;
 	pd->current_dr = DR_NONE;
 	list_add_tail(&pd->instance, &_usbpd);
@@ -4298,6 +4671,15 @@ void usbpd_destroy(struct usbpd *pd)
 	if (!pd)
 		return;
 
+#if defined(CONFIG_DUAL_ROLE_USB_INTF)
+	devm_dual_role_instance_unregister(&pd->dev, pd->dual_role);
+	devm_kfree(&pd->dev, pd->desc);
+#elif defined(CONFIG_TYPEC)
+	typec_unregister_port(pd->port);
+#endif
+#if defined(CONFIG_USB_CCIC_NOTIFIER_USING_QC)
+	pm6150_usbpd_destroy();
+#endif
 	list_del(&pd->instance);
 	power_supply_unreg_notifier(&pd->psy_nb);
 	power_supply_put(pd->usb_psy);

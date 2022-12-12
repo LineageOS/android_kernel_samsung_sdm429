@@ -1374,6 +1374,20 @@ config TOUCHSCREEN_SYNAPTICS_DSX
           If unsure, say N.
 
 source "drivers/input/touchscreen/synaptics_dsx/Kconfig"
+
+
+config TOUCHSCREEN_FTS_N9
+       bool "Focaltech9 Touchscreen"
+       depends on SPI
+       help
+         Say Y here if you have a ft5X06 touchscreen.
+	 Ft5x06 controllers are multi touch controllers which can
+	 report 5 touches at a time.
+
+         If unsure, say N.
+
+source "drivers/input/touchscreen/focaltech_touch_n9/Kconfig"
+
 source "drivers/input/touchscreen/focaltech_touch/Kconfig"
 
 config TOUCHSCREEN_FT5X06
@@ -1434,6 +1448,29 @@ config TOUCHSCREEN_HIMAX_CHIPSET
 
 source "drivers/input/touchscreen/hxchipset/Kconfig"
 
+config TOUCHSCREEN_ILI9881H
+	bool "ili9881h Touchscreen Driver"
+	depends on SPI
+	help
+	  Say Y here if you have a Himax CHIPSET touchscreen.
+	  HIMAX controllers are multi touch controllers which can
+	  report 10 touches at a time.
+
+          If unsure, say N.
+
+source "drivers/input/touchscreen/ili9881h/Kconfig"
+
+config TOUCHSCREEN_ILI9882N
+	bool "ili9882n Touchscreen Driver"
+	depends on SPI
+	help
+	  Say Y here if you have a Himax CHIPSET touchscreen.
+	  HIMAX controllers are multi touch controllers which can
+	  report 10 touches at a time.
+
+          If unsure, say N.
+source "drivers/input/touchscreen/ili9882n/Kconfig"
+
 config TOUCHSCREEN_EKTF3XXX_CHIPSET
 	bool "Elan EKTF3XXX touchpanel CHIPSET"
 	depends on I2C
@@ -1444,6 +1481,10 @@ config TOUCHSCREEN_EKTF3XXX_CHIPSET
 
 		  If unusre, say N.
 
+menuconfig TOUCHSCREEN_TID_SUPPORT
+	bool "touch-info support"
+	help
+	  Say Y here if you want to use touch-info interface.
 config TOUCHSCREEN_RAYDIUM_CHIPSET
 	bool "Raydium WT030 touchpanel CHIPSET"
 	depends on I2C
@@ -1451,5 +1492,46 @@ config TOUCHSCREEN_RAYDIUM_CHIPSET
 	  Say Y here if you have a Raydium WT030 CHIPSET touchscreen.
 
 	  If unsure, say N.
+
+
+config TOUCHSCREEN_TID_PROC_SUPPORT
+	bool "touch proc fs support"
+	depends on TOUCHSCREEN_TID_SUPPORT
+	help
+	  Say Y here if you want to use touch proc
+	  interface like open-short test.
+
+config TOUCHSCREEN_TID_OPENSHORT_TEST
+	bool "open-short test"
+	select TOUCHSCREEN_TID_PROC_SUPPORT
+	depends on TOUCHSCREEN_TID_SUPPORT
+	help
+	  Say Y here if you want to use touch proc
+	  interface of open-short test.
+
+config TOUCHSCREEN_TID_OPENSHORT_TEST_STORE_RESULT
+	bool "write the result of open-short test to file"
+	select TOUCHSCREEN_TID_OPENSHORT_TEST
+	depends on TOUCHSCREEN_TID_SUPPORT
+	help
+	  Say Y here if you want to write the result
+	  of open-short test to file.
+
+config TOUCHSCREEN_TID_LOCKDOWNINFO_SUPPORT
+	bool "lockdown-info support"
+	default TOUCHSCREEN_TID_SUPPORT
+	depends on TOUCHSCREEN_TID_SUPPORT
+	help
+	  Say Y here if you want to use touch proc
+	  interface of lockdown info.
+
+config TOUCHSCREEN_TID_GESTURE_SUPPORT
+	bool "gesture support"
+	select TOUCHSCREEN_TID_PROC_SUPPORT
+	depends on TOUCHSCREEN_TID_SUPPORT
+	help
+	  Say Y here if you want to support gesture.
+	  
+	  
 
 endif

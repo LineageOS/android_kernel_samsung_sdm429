@@ -731,7 +731,9 @@ int diag_cmd_add_reg(struct diag_cmd_reg_entry_t *new_entry, uint8_t proc,
 		     int pid)
 {
 	struct diag_cmd_reg_t *new_item = NULL;
-
+       //bug 380286  sunkai 20180813 Repairing BT secondary coupling fail
+        struct diag_cmd_reg_t *temp_item = NULL;
+        struct diag_cmd_reg_entry_t *temp_entry = NULL;
 	if (!new_entry) {
 		pr_err("diag: In %s, invalid new entry\n", __func__);
 		return -EINVAL;
@@ -757,6 +759,20 @@ int diag_cmd_add_reg(struct diag_cmd_reg_entry_t *new_entry, uint8_t proc,
 	INIT_LIST_HEAD(&new_item->link);
 
 	mutex_lock(&driver->cmd_reg_mutex);
+        //+bug 380286  sunkai 20180813 Repairing BT secondary coupling fail
+        if(proc > 0){
+               temp_entry = diag_cmd_search(new_entry, proc);
+               if (temp_entry) {
+                       temp_item = container_of(temp_entry, struct diag_cmd_reg_t, entry);
+                       if (temp_item) {
+                               temp_item->pid = pid;
+                               mutex_unlock(&driver->cmd_reg_mutex);
+                               kfree(new_item);
+                               return 0;
+                       }
+               }
+       }
+      //-bug 380286  sunkai 20180813 Repairing BT secondary coupling fail
 	list_add_tail(&new_item->link, &driver->cmd_reg_list);
 	driver->cmd_reg_count++;
 	diag_cmd_invalidate_polling(DIAG_CMD_ADD);

@@ -65,7 +65,9 @@
 /* module params */
 #define WCNSS_CONFIG_UNSPECIFIED (-1)
 #define UINT32_MAX (0xFFFFFFFFU)
-
+//+Bug 603254,fengxu,add,2020/12/03,Add the wifi/bt firmware version info file
+#define WLAN_SW_VERSION_LEN 64
+//-Bug 603254,fengxu,add,2020/12/03,Add the wifi/bt firmware version info file
 #define SUBSYS_NOTIF_MIN_INDEX	0
 #define SUBSYS_NOTIF_MAX_INDEX	9
 char *wcnss_subsys_notif_type[] = {
@@ -451,6 +453,10 @@ static struct {
 	dev_t dev_ctrl, dev_node;
 	struct class *node_class;
 	struct cdev ctrl_dev, node_dev;
+//+Bug 603254,fengxu,add,2020/12/03,Add the wifi/bt firmware version info file
+        /*Add for get wcnss_wlan_version*/
+        char wcnss_wlan_version[WLAN_SW_VERSION_LEN];
+//-Bug 603254,fengxu,add,2020/12/03,Add the wifi/bt firmware version info file
 } *penv = NULL;
 
 static void *wcnss_ipc_log;
@@ -591,6 +597,21 @@ static ssize_t wcnss_version_show(struct device *dev,
 }
 
 static DEVICE_ATTR(wcnss_version, 0400, wcnss_version_show, NULL);
+
+
+//+Bug 603254,fengxu,add,2020/12/03,Add the wifi/bt firmware version info file
+static ssize_t wcnss_wlan_version_show(struct device *dev,
+                                       struct device_attribute *attr,
+                                       char *buf)
+{
+        if (!penv)
+                return -ENODEV;
+
+        return scnprintf(buf, PAGE_SIZE, "%s", penv->wcnss_wlan_version);
+}
+
+static DEVICE_ATTR(wcnss_wlan_version, 0444, wcnss_wlan_version_show, NULL);
+//-Bug 603254,fengxu,add,2020/12/03,Add the wifi/bt firmware version info file
 
 /* wcnss_reset_fiq() is invoked when host drivers fails to
  * communicate with WCNSS over SMD; so logging these registers
@@ -1230,9 +1251,16 @@ static int wcnss_create_sysfs(struct device *dev)
 	ret = device_create_file(dev, &dev_attr_wcnss_mac_addr);
 	if (ret)
 		goto remove_version;
-
+//+Bug 603254,fengxu,add,2020/12/03,Add the wifi/bt firmware version info file
+        ret = device_create_file(dev, &dev_attr_wcnss_wlan_version);
+        if (ret)
+                goto remove_wcnss_mac;
+//-Bug 603254,fengxu,add,2020/12/03,Add the wifi/bt firmware version info file
 	return 0;
-
+//+Bug 603254,fengxu,add,2020/12/03,Add the wifi/bt firmware version info file
+remove_wcnss_mac:
+        device_remove_file(dev, &dev_attr_wcnss_mac_addr);
+//+Bug 603254,fengxu,add,2020/12/03,Add the wifi/bt firmware version info file
 remove_version:
 	device_remove_file(dev, &dev_attr_wcnss_version);
 remove_thermal:
@@ -1247,6 +1275,9 @@ static void wcnss_remove_sysfs(struct device *dev)
 		device_remove_file(dev, &dev_attr_thermal_mitigation);
 		device_remove_file(dev, &dev_attr_wcnss_version);
 		device_remove_file(dev, &dev_attr_wcnss_mac_addr);
+//+Bug 603254,fengxu,add,2020/12/03,Add the wifi/bt firmware version info file
+                device_remove_file(dev, &dev_attr_wcnss_wlan_version);
+//-Bug 603254,fengxu,add,2020/12/03,Add the wifi/bt firmware version info file
 	}
 }
 
@@ -2317,6 +2348,10 @@ static void wcnss_process_smd_msg(int len)
 			return;
 		}
 		build[len] = 0;
+//+Bug 603254,fengxu,add,2020/12/03,Add the wifi/bt firmware version info file
+                snprintf(penv->wcnss_wlan_version, WLAN_SW_VERSION_LEN,
+                         "HostSW: %s, FW: %s", penv->wcnss_version, build);
+//-Bug 603254,fengxu,add,2020/12/03,Add the wifi/bt firmware version info file
 		wcnss_log(INFO, "build version %s\n", build);
 		break;
 

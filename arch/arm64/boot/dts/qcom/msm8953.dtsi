@@ -42,17 +42,24 @@
 			compatible = "android,firmware";
 			vbmeta {
 				compatible = "android,vbmeta";
-				parts = "vbmeta,boot,system,vendor,dtbo,recovery";
+				parts = "vbmeta,boot,system,vendor,product,dtbo,recovery";
 			};
 
 			fstab {
 				compatible = "android,fstab";
+				product {
+					compatible = "android,product";
+					dev = "/dev/block/platform/soc/7824900.sdhci/by-name/product";
+					type = "ext4";
+					mnt_flags = "ro,errors=panic";
+					fsmgr_flags = "wait,verify,avb";
+				};
 				vendor {
 					compatible = "android,vendor";
 					dev = "/dev/block/platform/soc/7824900.sdhci/by-name/vendor";
 					type = "ext4";
 					mnt_flags = "ro,barrier=1,discard";
-					fsmgr_flags = "wait,avb";
+					fsmgr_flags = "wait,verify,avb";
 					status = "ok";
 				};
 
@@ -60,7 +67,7 @@
 		};
 	};
 
-	reserved-memory {
+	reserved_memory: reserved-memory {
 		#address-cells = <2>;
 		#size-cells = <2>;
 		ranges;
@@ -68,7 +75,7 @@
 		other_ext_mem: other_ext_region@0 {
 			compatible = "removed-dma-pool";
 			no-map;
-			reg = <0x0 0x85b00000 0x0 0xd00000>;
+			reg = <0x0 0x83600000 0x0 0x3200000>;
 		};
 
 		modem_mem: modem_region@0 {
@@ -159,6 +166,22 @@
 			size = <0x400000>;
 		};
 
+		/* chk72707, xieshuaishuai, ADD, 20201208, add bootloader log feature to project,start */
+		wt_share_mem: wt_region@92000000 {
+			compatible = "wt_share_mem";
+			no-map;
+			reg = <0 0x92000000 0 0x00100000>;
+		};
+
+		pstore: ramoops@92100000 {
+			compatible = "ramoops";
+			reg = <0 0x92100000 0 0x100000>;
+			ecc-size     = <0x4>;
+			console-size = <0x40000>;
+			record-size  = <0x80000>;
+		};
+		/* chk72707, xieshuaishuai, ADD, 20201208, add bootloader log feature to project,end */
+
 		/* global autoconfigured region for contiguous allocations */
 		linux,cma {
 			compatible = "shared-dma-pool";
@@ -171,6 +194,7 @@
 
 	aliases {
 		/* smdtty devices */
+		smd0 = &smdtty_ds;
 		smd1 = &smdtty_apps_fm;
 		smd2 = &smdtty_apps_riva_bt_acl;
 		smd3 = &smdtty_apps_riva_bt_cmd;
@@ -188,6 +212,7 @@
 		i2c2 = &i2c_2;
 		i2c3 = &i2c_3;
 		i2c5 = &i2c_5;
+		i2c8 = &i2c_8;
 		spi3 = &spi_3;
 		spi6 = &spi_6;
 	};
@@ -254,6 +279,39 @@
 		#interrupt-cells = <3>;
 		reg = <0x0b000000 0x1000>,
 		      <0x0b002000 0x1000>;
+	};
+        fpc1020 {
+		compatible = "fpc,fpc1020";
+		interrupt-parent = <&tlmm>;
+		interrupts = <48 0>;
+		fpc,gpio_rst = <&tlmm 140 0x0>;
+		fpc,gpio_irq = <&tlmm 48 0>;
+		fpc,enable-on-boot;
+		pinctrl-names = "fpc1020_reset_reset",
+				"fpc1020_reset_active",
+				"fpc1020_irq_active";
+		pinctrl-0 = <&fpc_reset_low>;
+		pinctrl-1 = <&fpc_reset_high>;
+		pinctrl-2 = <&fpc_int_low>;
+	};
+        egis {
+		status = "okay";
+		compatible = "egistec,et523";
+		interrupt-parent = <&tlmm>;
+		interrupts = <48 0x00>;
+		egistec,gpio_pwr_en = <&tlmm 134 0x00>;
+		egistec,gpio_rst = <&tlmm 140 0x00>;
+		egistec,gpio_irq = <&tlmm 48 0x00>;
+	};
+
+        fpsensor_fp {
+	    status = "ok";
+	    compatible = "qcom,fingerprint-gpio";
+	   	interrupt-parent = <&tlmm>;
+		interrupts = <48 0x00>;
+		fp-gpio-power = <&tlmm 134 0x00>;
+		fp-gpio-int = <&tlmm 48 0x00>;
+		fp-gpio-reset = <&tlmm 140 0x00>;
 	};
 
 	wakegic: wake-gic@601d4 {
@@ -433,9 +491,9 @@
 		#thermal-sensor-cells = <1>;
 	};
 
-	qcom_seecom: qseecom@85b00000 {
+	qcom_seecom: qseecom@83600000 {
 		compatible = "qcom,qseecom";
-		reg = <0x85b00000 0x800000>;
+		reg = <0x83600000 0x2D00000>;
 		reg-names = "secapp-region";
 		qcom,hlos-num-ce-hw-instances = <1>;
 		qcom,hlos-ce-hw-instance = <0>;
@@ -709,6 +767,9 @@
 		qcom,ver-reg-exists;
 		qcom,bam-consumer-pipe-index = <8>;
 		qcom,bam-producer-pipe-index = <9>;
+		dmas = <&dma_blsp1 8 64 0x20000020 0x20>,
+		<&dma_blsp1 9 32 0x20000020 0x20>;
+		dma-names = "tx", "rx";
 		qcom,master-id = <86>;
 		status = "disabled";
 	};
@@ -841,6 +902,35 @@
 		dma-names = "tx", "rx";
 		status = "disabled";
 	};
+//bug 515760 wangchengqiang 20191125 P->Q
+    i2c_8: i2c@7af8000 { /* BLSP2 QUP4 */
+		status = "disabled";
+		compatible = "qcom,i2c-msm-v2";
+	#address-cells = <1>;
+	#size-cells = <0>;
+		reg-names = "qup_phys_addr";
+		reg = <0x7af8000 0x600>;
+		interrupt-names = "qup_irq";
+		interrupts = <0 302 0>;
+
+		qcom,clk-freq-out = <400000>;
+		qcom,clk-freq-in  = <19200000>;
+		clock-names = "iface_clk", "core_clk";
+		clocks = <&clock_gcc clk_gcc_blsp2_ahb_clk>,
+			<&clock_gcc clk_gcc_blsp2_qup4_i2c_apps_clk>;
+
+		pinctrl-names = "i2c_active", "i2c_sleep";
+		pinctrl-0 = <&i2c_8_active>;
+		pinctrl-1 = <&i2c_8_sleep>;
+		qcom,noise-rjct-scl = <0>;
+		qcom,noise-rjct-sda = <0>;
+		qcom,master-id = <84>;
+
+		dmas = <&dma_blsp1 10 64 0x20000020 0x20>,
+			<&dma_blsp1 11 32 0x20000020 0x20>;
+		dma-names = "tx", "rx";
+	};
+//-bug600729,zhouweijie.wt,add,20201120,Q->R audio bring up
 
 	slim_msm: slim@c140000{
 		cell-index = <1>;
@@ -1203,6 +1293,11 @@
 
 	qcom,smdtty {
 		compatible = "qcom,smdtty";
+		
+		smdtty_ds: qcom,smdtty-ds {
+			qcom,smdtty-remote = "modem";
+			qcom,smdtty-port-name = "DS";
+		};
 
 		smdtty_apps_fm: qcom,smdtty-apps-fm {
 			qcom,smdtty-remote = "wcnss";
@@ -1316,8 +1411,8 @@
 		reg = <0xb017000 0x1000>;
 		reg-names = "wdt-base";
 		interrupts = <0 3 0>, <0 4 0>;
-		qcom,bark-time = <11000>;
-		qcom,pet-time = <9360>;
+		qcom,bark-time = <15000>;
+		qcom,pet-time = <8000>;
 		qcom,ipi-ping;
 		qcom,wakeup-enable;
 		qcom,scandump-size = <0x40000>;
@@ -1415,6 +1510,19 @@
 			qcom,allocate-boot-time;
 			label = "modem";
 		};
+	};
+
+	sn_fuse: snfuse@0xa0128 {
+		compatible = "qcom,sn-fuse";
+		reg = <0xa4128 0x4>;
+		reg-names = "sn-base";
+	};
+
+
+	sec_boot_fuse: secbootfuse@0xa41d0 {
+		compatible = "qcom,sec-boot-fuse";
+		reg = <0xa41d0 0x4>;
+		reg-names = "sec-boot-base";
 	};
 
 	jtag_mm0: jtagmm@619c000 {
@@ -1693,6 +1801,10 @@
 		cell-index = <0>;
 	};
 
+    usb_noti: usb-notifier {
+		compatible = "samsung,usb-notifier";
+	};
+
 	usb3: ssusb@7000000{
 		compatible = "qcom,dwc-usb3-msm";
 		reg = <0x07000000 0xfc000>,
@@ -1832,7 +1944,7 @@
 		qcom,vdd-voltage-level = <0 925000 925000>;
 
 		qcom,qusb-phy-init-seq = <0xf8 0x80
-					0xb3 0x84
+					0x55 0x84
 					0x83 0x88
 					0xc0 0x8c
 					0x14 0x9c
@@ -1842,6 +1954,19 @@
 					0x00 0x90
 					0x9f 0x1c
 					0x00 0x18>;
+//+bug 72645, jinyushun.wt, 20201125, add, add usb host eye tune para
+		qcom,qusb-phy-host-init-seq = <0xf8 0x80
+					0x85 0x84
+					0x83 0x88
+					0xc0 0x8c
+					0x14 0x9c
+					0x30 0x08
+					0x79 0x0c
+					0x21 0x10
+					0x01 0x90
+					0x9f 0x1c
+					0x00 0x18>;
+//-bug 72645, jinyushun.wt, 20201125, add, add usb host eye tune para
 		phy_type= "utmi";
 		qcom,phy-clk-scheme = "cml";
 		qcom,major-rev = <1>;
@@ -2318,4 +2443,23 @@
 
 &gdsc_usb30 {
 	status = "okay";
+};
+
+&soc {
+	afc {
+		status = "ok";
+		compatible = "gpio_afc";
+		pinctrl-names = "default", "active", "sleep";
+		pinctrl-0 = <&afc_switch_default &afc_data_default>;
+		pinctrl-1 = <&afc_data_active>;
+		pinctrl-2 = <&afc_data_sleep>;
+		afc_switch_gpio = <&pm8953_gpios 1 GPIO_ACTIVE_LOW>;
+		afc_data_gpio = <&tlmm 44 0>;
+	};
+
+	samsung,vibrator {
+		compatible = "samsung_vib";
+		samsung,vib_type = "COINDC";
+		status = "ok";
+	};
 };

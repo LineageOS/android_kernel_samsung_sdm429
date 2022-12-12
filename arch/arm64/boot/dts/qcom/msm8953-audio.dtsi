@@ -34,7 +34,7 @@
 		reg-names = "avtimer_lsb_addr", "avtimer_msb_addr";
 		qcom,clk-div = <27>;
 	};
-
+	//+bug600729,zhouweijie.wt,modify,20201120,Q->R audio bring up
 	int_codec: sound {
 		status = "okay";
 		compatible = "qcom,msm8952-audio-codec";
@@ -50,7 +50,7 @@
 
 		qcom,msm-ext-pa = "primary";
 		qcom,msm-mclk-freq = <9600000>;
-		qcom,msm-mbhc-hphl-swh = <0>;
+		qcom,msm-mbhc-hphl-swh = <1>;
 		qcom,msm-mbhc-gnd-swh = <0>;
 		qcom,msm-hs-micbias-type = "internal";
 		qcom,msm-micbias1-ext-cap;
@@ -62,22 +62,19 @@
 				"RX_I2S_CLK", "MCLK",
 				"TX_I2S_CLK", "MCLK",
 				"MIC BIAS External", "Handset Mic",
-				"MIC BIAS External2", "Headset Mic",
+				"MIC BIAS Internal2", "Headset Mic",
 				"MIC BIAS External", "Secondary Mic",
 				"AMIC1", "MIC BIAS External",
-				"AMIC2", "MIC BIAS External2",
+				"AMIC2", "MIC BIAS Internal2",
 				"AMIC3", "MIC BIAS External",
 				"ADC1_IN", "ADC1_OUT",
 				"ADC2_IN", "ADC2_OUT",
 				"ADC3_IN", "ADC3_OUT",
 				"PDM_IN_RX1", "PDM_OUT_RX1",
 				"PDM_IN_RX2", "PDM_OUT_RX2",
-				"PDM_IN_RX3", "PDM_OUT_RX3",
-				"WSA_SPK OUT", "VDD_WSA_SWITCH",
-				"SpkrMono WSA_IN", "WSA_SPK OUT";
+				"PDM_IN_RX3", "PDM_OUT_RX3";
 
-		qcom,cdc-us-euro-gpios = <&tlmm 63 0>;
-		qcom,cdc-us-eu-gpios = <&cdc_us_euro_sw>;
+
 		qcom,cdc-comp-gpios = <&cdc_comp_gpios>;
 		qcom,pri-mi2s-gpios = <&cdc_pri_mi2s_gpios>;
 		qcom,quin-mi2s-gpios = <&cdc_quin_mi2s_gpios>;
@@ -129,11 +126,11 @@
 				<&pmic_analog_codec>;
 		asoc-codec-names = "msm-stub-codec.1", "msm-dig-codec",
 					"analog-codec";
-		asoc-wsa-codec-names = "wsa881x-i2c-codec.2-000f";
-		asoc-wsa-codec-prefixes = "SpkrMono";
-		msm-vdd-wsa-switch-supply = <&pm8953_l5>;
-		qcom,msm-vdd-wsa-switch-voltage = <1800000>;
-		qcom,msm-vdd-wsa-switch-current = <10000>;
+		asoc-wsa-codec-names;
+//+Bug 603257, zhouweijie.wt, add , 20201130, add for mbhc adc detect
+		qcom,channel-num = <0x21>;//MPP2_1.8V:0x11 MPP2_5V:0x21
+		qcom,hph_mic-vadc = <&pm8953_vadc>;
+//-Bug 603257, zhouweijie.wt, add , 20201130, add for mbhc adc detect
 	};
 
 	cdc_us_euro_sw: msm_cdc_pinctrl_us_euro_sw {
@@ -166,11 +163,11 @@
 
 
 	i2c@78b6000 {
-		status = "okay";
+		status = "disabled";
 		#address-cells = <1>;
 		#size-cells = <0>;
 		wsa881x_i2c_f: wsa881x-i2c-codec@f {
-			status = "okay";
+			status = "disabled";
 			compatible = "qcom,wsa881x-i2c-codec";
 			reg = <0x0f>;
 			qcom,wsa-analog-vi-gpio = <&wsa881x_analog_vi_gpio>;
@@ -179,11 +176,20 @@
 				<&wsa881x_analog_reset_gpio>;
 		};
 		wsa881x_i2c_45: wsa881x-i2c-codec@45 {
-			status = "okay";
+			status = "disabled";
 			compatible = "qcom,wsa881x-i2c-codec";
 			reg = <0x45>;
 		};
 	};
+	i2c@7af8000 {
+		status = "okay";
+		aw87329_i2c@58{
+		compatible = "awinic,aw87329_pa";
+		reg = <0x58>;
+		reset-gpio = <&tlmm 96 0x01>;
+		};
+	};
+//-bug600729,zhouweijie.wt,modify,20201120,Q->R audio bring up
 
 	wsa881x_analog_vi_gpio: wsa881x_analog_vi_pctrl {
 		compatible = "qcom,msm-cdc-pinctrl";
@@ -336,7 +342,7 @@
 		pinctrl-names = "active", "sleep";
 		pinctrl-0 = <&tasha_mclk_default>;
 		pinctrl-1 = <&tasha_mclk_default>;
-		qcom,audio-ref-clk-gpio = <&pm8953_gpios 1 0>;
+		//qcom,audio-ref-clk-gpio = <&pm8953_gpios 1 0>;
 		clocks = <&clock_gcc clk_div_clk2>;
 	};
 

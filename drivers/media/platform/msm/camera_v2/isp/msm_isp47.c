@@ -2694,6 +2694,7 @@ int msm_vfe47_set_clk_rate(struct vfe_device *vfe_dev, long *rate)
 		}
 	}
 	/*set vfe clock*/
+	pr_err("msm_vfe47_set_clk_rate set vfe clock is %ld",*rate);//bug 600732,huangguoyong.wt,add,2021/06/13,add log for debug
 	rc = msm_camera_clk_set_rate(&vfe_dev->pdev->dev,
 				vfe_dev->vfe_clk[clk_idx], *rate);
 	if (rc < 0)

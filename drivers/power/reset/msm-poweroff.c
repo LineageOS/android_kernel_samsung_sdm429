@@ -35,6 +35,10 @@
 #include <soc/qcom/watchdog.h>
 #include <soc/qcom/minidump.h>
 
+#include <linux/notifier.h>
+#include <linux/ftrace.h>
+#include <linux/sec_debug.h>
+
 #define EMERGENCY_DLOAD_MAGIC1    0x322A4F99
 #define EMERGENCY_DLOAD_MAGIC2    0xC67E4350
 #define EMERGENCY_DLOAD_MAGIC3    0x77777777
@@ -50,7 +54,17 @@
 #define SCM_DLOAD_BOTHDUMPS	(SCM_DLOAD_MINIDUMP | SCM_DLOAD_FULLDUMP)
 
 static int restart_mode;
+
+#ifdef CONFIG_SEC_DEBUG
+/* This variable is updated in sec_debug
+ because device_initcall might be called too late to use this
+ when any expection occurs in the early stage of bootup.
+*/
+extern void __iomem *restart_reason;
+#else
 static void *restart_reason;
+#endif
+
 static bool scm_pmic_arbiter_disable_supported;
 static bool scm_deassert_ps_hold_supported;
 /* Download mode master kill-switch */
@@ -64,7 +78,11 @@ static bool force_warm_reboot;
  * There is no API from TZ to re-enable the registers.
  * So the SDI cannot be re-enabled when it already by-passed.
  */
+#if defined(WT_FINAL_RELEASE)
+static int download_mode = 0;
+#else
 static int download_mode = 1;
+#endif
 #else
 static const int download_mode;
 #endif
@@ -86,7 +104,7 @@ static void *kaslr_imem_addr;
 #endif
 static bool scm_dload_supported;
 static struct kobject dload_kobj;
-static void *dload_type_addr;
+static void __iomem *dload_type_addr;
 
 static int dload_set(const char *val, const struct kernel_param *kp);
 /* interface for exporting attributes */
@@ -140,7 +158,7 @@ static int scm_set_dload_mode(int arg1, int arg2)
 				&desc);
 }
 
-static void set_dload_mode(int on)
+void set_dload_mode(int on)
 {
 	int ret;
 
@@ -157,6 +175,10 @@ static void set_dload_mode(int on)
 		pr_err("Failed to set secure DLOAD mode: %d\n", ret);
 
 	dload_mode_enabled = on;
+
+#ifdef CONFIG_SEC_DEBUG
+	pr_err("set_dload_mode <%d> ( %lx )\n", on, CALLER_ADDR0);
+#endif
 }
 
 static bool get_dload_mode(void)
@@ -164,8 +186,11 @@ static bool get_dload_mode(void)
 	return dload_mode_enabled;
 }
 
+#if 0
 static void enable_emergency_dload_mode(void)
 {
+//+chk88027, xieshuaishuai, ADD, 20210521, control reboot edl to 9008 mode.
+#ifndef WT_FINAL_RELEASE
 	int ret;
 
 	if (emergency_dload_mode_addr) {
@@ -189,7 +214,12 @@ static void enable_emergency_dload_mode(void)
 	ret = scm_set_dload_mode(SCM_EDLOAD_MODE, 0);
 	if (ret)
 		pr_err("Failed to set secure EDLOAD mode: %d\n", ret);
+#else
+	pr_err("Failed to set secure EDLOAD mode \n");
+#endif
+//-chk88027, xieshuaishuai, ADD, 20210521, control reboot edl to 9008 mode.
 }
+#endif
 
 static int dload_set(const char *val, const struct kernel_param *kp)
 {
@@ -282,6 +312,7 @@ static void halt_spmi_pmic_arbiter(void)
 static void msm_restart_prepare(const char *cmd)
 {
 	bool need_warm_reset = false;
+#ifndef CONFIG_SEC_DEBUG
 #ifdef CONFIG_QCOM_DLOAD_MODE
 	/* Write download mode flags if we're panic'ing
 	 * Write download mode flags if restart_mode says so
@@ -291,7 +322,9 @@ static void msm_restart_prepare(const char *cmd)
 	set_dload_mode(download_mode &&
 			(in_panic || restart_mode == RESTART_DLOAD));
 #endif
+#endif
 
+#ifndef CONFIG_SEC_DEBUG
 	if (qpnp_pon_check_hard_reset_stored()) {
 		/* Set warm reset as true when device is in dload mode */
 		if (get_dload_mode() ||
@@ -302,6 +335,9 @@ static void msm_restart_prepare(const char *cmd)
 		need_warm_reset = (get_dload_mode() ||
 				(cmd != NULL && cmd[0] != '\0'));
 	}
+#else
+	need_warm_reset = get_dload_mode();
+#endif
 
 	if (force_warm_reboot)
 		pr_info("Forcing a warm reset of the system\n");
@@ -314,6 +350,9 @@ static void msm_restart_prepare(const char *cmd)
 
 	if (cmd != NULL) {
 		if (!strncmp(cmd, "bootloader", 10)) {
+		#ifndef WT_FINAL_RELEASE
+			//qpnp_pon_system_pwr_off(PON_POWER_OFF_WARM_RESET);
+		#endif
 			qpnp_pon_set_restart_reason(
 				PON_RESTART_REASON_BOOTLOADER);
 			__raw_writel(0x77665500, restart_reason);
@@ -326,6 +365,9 @@ static void msm_restart_prepare(const char *cmd)
 				PON_RESTART_REASON_RTC);
 			__raw_writel(0x77665503, restart_reason);
 		} else if (!strcmp(cmd, "dm-verity device corrupted")) {
+		#ifndef WT_FINAL_RELEASE
+			//qpnp_pon_system_pwr_off(PON_POWER_OFF_WARM_RESET);
+		#endif
 			qpnp_pon_set_restart_reason(
 				PON_RESTART_REASON_DMVERITY_CORRUPTED);
 			__raw_writel(0x77665508, restart_reason);
@@ -362,13 +404,16 @@ static void msm_restart_prepare(const char *cmd)
 				__raw_writel(0x6f656d00 | (code & 0xff),
 					     restart_reason);
 			}
+#ifndef CONFIG_SEC_DEBUG
 		} else if (!strncmp(cmd, "edl", 3)) {
 			enable_emergency_dload_mode();
+#endif
 		} else {
 			__raw_writel(0x77665501, restart_reason);
 		}
 	}
 
+	sec_debug_update_restart_reason(cmd, in_panic, restart_mode);
 	flush_cache_all();
 
 	/*outer_flush_all is not supported by 64bit kernel*/
@@ -404,7 +449,8 @@ static void deassert_ps_hold(void)
 
 static void do_msm_restart(enum reboot_mode reboot_mode, const char *cmd)
 {
-	pr_notice("Going down for restart now\n");
+	//temp
+	pr_err("Going down for restart now\n");
 
 	msm_restart_prepare(cmd);
 

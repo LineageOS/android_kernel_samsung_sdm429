@@ -240,6 +240,60 @@ static long cpu_clk_8953_round_rate(struct clk *c, unsigned long rate)
 	return clk_round_rate(c->parent, rate);
 }
 
+#ifdef CONFIG_SEC_DEBUG_APPS_CLK_LOGGING
+typedef struct {
+	uint64_t ktime;
+	uint64_t qtime;
+	uint64_t rate;
+} apps_clk_log_t;
+
+#define MAX_CLK_LOG_CNT (10)
+
+typedef struct {
+	uint32_t max_cnt;
+	uint32_t index;
+	apps_clk_log_t log[MAX_CLK_LOG_CNT];
+} cpuclk_log_t;
+
+cpuclk_log_t cpuclk_log[2] = {
+	[0] = {.max_cnt = MAX_CLK_LOG_CNT,},
+	[1] = {.max_cnt = MAX_CLK_LOG_CNT,},
+};
+
+static void clk_osm_add_log(struct clk *cpuclk, unsigned long rate)
+{
+	cpuclk_log_t *clk = NULL;
+	apps_clk_log_t *log = NULL;
+	uint64_t idx = 0;
+
+	if (!strncmp(cpuclk->dbg_name, "a53_bc_clk", 10)) {
+		clk = &cpuclk_log[0];
+		idx = clk->index;
+		log = &clk->log[idx];
+		log->ktime = local_clock();
+		log->qtime = arch_counter_get_cntvct();
+		log->rate = rate;
+		clk->index = (clk->index + 1) % MAX_CLK_LOG_CNT;
+	}
+
+	if (!strncmp(cpuclk->dbg_name, "cci_clk", 7)) {
+		clk = &cpuclk_log[1];
+		idx = clk->index;
+		log = &clk->log[idx];
+		log->ktime = local_clock();
+		log->qtime = arch_counter_get_cntvct();
+		log->rate = rate;
+		clk->index = (clk->index + 1) % MAX_CLK_LOG_CNT;
+	}
+}
+
+void* clk_osm_get_log_addr(void)
+{
+	return (void *)&cpuclk_log;
+}
+EXPORT_SYMBOL(clk_osm_get_log_addr);
+#endif /* CONFIG_SEC_DEBUG_APPS_CLK_LOGGING */
+
 static int cpu_clk_8953_set_rate(struct clk *c, unsigned long rate)
 {
 	int ret = 0;
@@ -272,6 +326,11 @@ static int cpu_clk_8953_set_rate(struct clk *c, unsigned long rate)
 			a53_pwr_clk.c.rate  = rate;
 		cci_clk.c.rate = CCI_RATE(rate);
 	}
+
+#ifdef CONFIG_SEC_DEBUG_APPS_CLK_LOGGING
+	//	pr_info("%s [%s:%ld]\n", __func__, c->dbg_name, rate);
+	clk_osm_add_log(c, rate);
+#endif /* CONFIG_SEC_DEBUG_APPS_CLK_LOGGING */
 
 	/* Remove PM QOS request */
 	if (hw_low_power_ctrl)

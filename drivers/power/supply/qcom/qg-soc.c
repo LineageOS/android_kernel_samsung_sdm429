@@ -49,6 +49,11 @@ module_param_named(
 int qg_adjust_sys_soc(struct qpnp_qg *chip)
 {
 	int soc, vbat_uv, rc;
+//+Bug 463185 caijiaqi.wt,MODIFIY,20190802,S86119AA1 charger 100% current to 300mA
+#if defined(CONFIG_ARCH_MSM8953)
+        int ibat = 0;
+#endif
+//-Bug 463185 caijiaqi.wt,MODIFIY,20190802,S86119AA1 charger 100% current to 300mA
 	int vcutoff_uv = chip->dt.vbatt_cutoff_mv * 1000;
 
 	chip->sys_soc = CAP(QG_MIN_SOC, QG_MAX_SOC, chip->sys_soc);
@@ -67,7 +72,23 @@ int qg_adjust_sys_soc(struct qpnp_qg *chip)
 		if (chip->last_adj_ssoc == FULL_SOC)
 			soc = FULL_SOC;
 		else /* Hold SOC at 99% until we hit 100% */
-			soc = FULL_SOC - 1;
+//+Bug 463185 caijiaqi.wt,MODIFIY,20190802,S86119AA1 charger 100% current to 300mA
+#if defined(CONFIG_ARCH_MSM8953)
+                {
+                        rc = qg_get_battery_current(chip, &ibat);
+                        if (rc < 0){
+                                printk("WT read ibat error\n");
+                                ibat = 0;
+                        }
+                        if((chip->last_adj_ssoc == 99) && (ibat > -300000) && (ibat < 0))
+                                soc = 100;
+                        else
+                                soc = FULL_SOC - 1;
+                }
+#else
+                        soc = FULL_SOC - 1;
+#endif
+//-Bug 463185 caijiaqi.wt,MODIFIY,20190802,S86119AA1 charger 100% current to 300mA
 	} else {
 		soc = DIV_ROUND_CLOSEST(chip->sys_soc, 100);
 	}
@@ -176,16 +197,40 @@ static bool maint_soc_timeout(struct qpnp_qg *chip)
 static void update_msoc(struct qpnp_qg *chip)
 {
 	int rc = 0, sdam_soc, batt_temp = 0,  batt_soc_32bit = 0;
+	//bug 438891,caijiaqi.wt,Modify,20190418,Limit SOC update when charging stop.
+	int last_ibat = 0;
 	bool usb_present = is_usb_present(chip);
+
+	//+bug 438891,caijiaqi.wt,Modify,20190418,Limit SOC update when charging stop.
+	rc = qg_read(chip, chip->qg_base + QG_LAST_ADC_I_DATA0_REG,
+					(u8 *)&last_ibat, 2);
+	if (rc < 0)
+	{
+		pr_err("Failed to read ibat, rc=%d\n",  rc);
+		last_ibat = 0;
+	}
+	last_ibat = sign_extend32(last_ibat, 15);
+	last_ibat = I_RAW_TO_UA(last_ibat);
 
 	if (chip->catch_up_soc > chip->msoc) {
 		/* SOC increased */
-		if (usb_present) /* Increment if USB is present */
+		chip->catch_up_soc = chip->msoc;
+		if (usb_present && last_ibat <= 0)/* Increment if USB is present */
+		{
 			chip->msoc += chip->dt.delta_soc;
+			chip->catch_up_soc = chip->msoc;
+		}
 	} else if (chip->catch_up_soc < chip->msoc) {
 		/* SOC dropped */
-		chip->msoc -= chip->dt.delta_soc;
+		chip->catch_up_soc = chip->msoc;
+		if (!usb_present || last_ibat > 0)
+		{
+			chip->msoc -= chip->dt.delta_soc;
+			chip->catch_up_soc = chip->msoc;
+		}
 	}
+	//-bug 438891,caijiaqi.wt,Modify,20190418,Limit SOC update when charging stop.
+
 	chip->msoc = CAP(0, 100, chip->msoc);
 
 	if (chip->maint_soc > 0 && chip->msoc < chip->maint_soc

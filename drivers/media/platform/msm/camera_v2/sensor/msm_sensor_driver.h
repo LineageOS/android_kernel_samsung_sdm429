@@ -18,4 +18,15 @@
 int32_t msm_sensor_driver_probe(void *setting,
 	struct msm_sensor_info_t *probed_info, char *entity_name);
 
+//+bug 600732,huangguoyong.wt, add,2020/11/16,86118 project camera kernel code for bring up
+enum hi846_sensor_module_D
+{
+    HI846_SENSOR_MODULE_D_OTHER_SENSOR,
+    HI846_SENSOR_MODULE_D_MATCH_NONE,
+    HI846_SENSOR_MODULE_D_FRONT_SHINETECH_1,
+    HI846_SENSOR_MODULE_D_FRONT_TXD_2,
+    HI846_SENSOR_MODULE_D_WIDE_TRULY_1,
+    HI846_SENSOR_MODULE_D_WIDE_SHINETECH_2,
+};
+//-bug 600732,huangguoyong.wt, add,2020/11/16,86118 project camera kernel code for bring up
 #endif

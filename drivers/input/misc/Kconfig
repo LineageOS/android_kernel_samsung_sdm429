@@ -887,5 +887,22 @@ config INPUT_HISI_POWERKEY
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called hisi_powerkey.
-
+#+bug601075 ,  xuyanan.wt,20201119,add  bringup sar sensor
+config INPUT_ABOV
+	tristate "ABOV_SAR_sensor"
+	depends on I2C
+	default n
+	help
+	  Say Y to enable the SAR detection application, if N here not to use the
+	  this SAR sensor
+#-bug601075 ,  xuyanan.wt,20201119,add  bringup sar sensor
+#+bug603256  xieyu.wt,20201124,rm sar sensor  capsensor_top for sda450 
+config INPUT_ABOV_SINGLE
+	tristate "ABOV_SAR_sensor"
+	depends on I2C
+	default n
+	help
+	  Say Y to enable the SAR detection application, if N here not to use the
+	  this SAR sensor
+#-bug603256  xieyu.wt,20201124,rm sar sensor  capsensor_top for sda450 
 endif

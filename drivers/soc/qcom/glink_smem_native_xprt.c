@@ -487,6 +487,7 @@ static int fifo_read(struct edge_info *einfo, void *_data, int len)
 		WARN_ON_ONCE(1);
 		return -EINVAL;
 	}
+
 	while (len) {
 		ptr = einfo->rx_fifo + read_index;
 		if (read_index <= write_index)

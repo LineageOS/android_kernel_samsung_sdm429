@@ -1308,9 +1308,11 @@ static int qpnp_flash_led_switch_disable(struct flash_switch_data *snode)
 			return rc;
 		}
 	}
-
-	led->enable--;
-	if (led->enable == 0) {
+	//++bug 600732,jiaozhibin.wt,modify,2020/12/21,86117 project for add flash node
+	pr_debug("wingtech disable led->enable=%d\n", led->enable);
+	//led->enable--;
+	if (1) {//ExtB P200121-02469 [camera-BSP][feature],yinjie.wt add 2020/02/20 for flash level
+	//--bug 600732,jiaozhibin.wt,modify,2020/12/21,86117 project for add flash node
 		rc = qpnp_flash_led_masked_write(led,
 				FLASH_LED_REG_MOD_CTRL(led->base),
 				FLASH_LED_MOD_CTRL_MASK, FLASH_LED_DISABLE);
@@ -1469,19 +1471,26 @@ static int qpnp_flash_poll_vreg_ok(struct qpnp_flash_led *led)
 
 	return 0;
 }
-
+//++bug 600732,jiaozhibin.wt,modify,2020/12/21,86117 project for add flash node
+static int torch_num = 0;
 static int qpnp_flash_led_switch_set(struct flash_switch_data *snode, bool on)
 {
 	struct qpnp_flash_led *led = dev_get_drvdata(&snode->pdev->dev);
 	u8 pmic_subtype = led->pdata->pmic_rev_id->pmic_subtype;
 	int rc, i, addr_offset;
 	u8 val, mask;
+	pr_debug("wingtech qpnp_flash_led_switch_set snode->enabled:%d\n",snode->enabled);
 
 	if (snode->enabled == on) {
-		pr_debug("Switch node is already %s!\n",
+		pr_debug("wingtech Switch node is already %s!\n",
 			on ? "enabled" : "disabled");
-		return 0;
+		if(torch_num < 2){//ExtB P200121-02469 [camera-BSP][feature],yinjie.wt add 2020/02/20 for flash level
+			torch_num++;
+			return 0;
+		}
 	}
+	pr_debug("wingtech qpnp_flash_led_switch_set on:%d\n",on);
+	//--bug 600732,jiaozhibin.wt,modify,2020/12/21,86117 project for add flash node
 
 	if (!on) {
 		rc = qpnp_flash_led_switch_disable(snode);
@@ -1561,8 +1570,8 @@ static int qpnp_flash_led_switch_set(struct flash_switch_data *snode, bool on)
 			return rc;
 		}
 	}
-
-	if (led->enable == 0) {
+	pr_debug("wingtech set led->enable=%d\n", led->enable);
+	if (1) {//++bug 600732,jiaozhibin.wt,modify,2020/12/21,86117 project for add flash node
 		rc = qpnp_flash_led_masked_write(led,
 				FLASH_LED_REG_MOD_CTRL(led->base),
 				FLASH_LED_MOD_CTRL_MASK, FLASH_LED_MOD_ENABLE);
@@ -1582,7 +1591,8 @@ static int qpnp_flash_led_switch_set(struct flash_switch_data *snode, bool on)
 			}
 		}
 	}
-	led->enable++;
+	//led->enable++;
+	//--bug 600732,jiaozhibin.wt,modify,2020/12/21,86117 project for add flash node
 
 	if (led->trigger_lmh) {
 		rc = qpnp_flash_led_masked_write(led,

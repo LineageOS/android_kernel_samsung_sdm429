@@ -1,6 +1,6 @@
 /* Copyright (c) 2011-2015, The Linux Foundation. All rights reserved
  *
- * program is free software; you can redistribute it and/or modify
+ * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
  * only version 2 as published by the Free Software Foundation.
  *
@@ -37,6 +37,11 @@
 #include <media/v4l2-ioctl.h>
 #include <media/radio-iris.h>
 #include <asm/unaligned.h>
+//[++QC] it is added by SS. please check internally it is still required in the current project
+#include <linux/of.h>
+#include <linux/of_gpio.h>
+#include <linux/gpio.h>
+//[--QC] it is added by SS. please check internally it is still required in the current project
 
 static unsigned int rds_buf = 100;
 static int oda_agt;
@@ -52,10 +57,10 @@ static char formatting_dir;
 static unsigned char sig_blend = CTRL_ON;
 static DEFINE_MUTEX(iris_fm);
 
-module_param(rds_buf, uint, 0000);
+module_param(rds_buf, uint, 0);
 MODULE_PARM_DESC(rds_buf, "RDS buffer entries: *100*");
 
-module_param(sig_blend, byte, 0200 | 0400 | 0040 | 0004);
+module_param(sig_blend, byte, S_IWUSR | S_IRUGO);
 MODULE_PARM_DESC(sig_blend, "signal blending switch: 0:OFF 1:ON");
 
 static void radio_hci_cmd_task(unsigned long arg);
@@ -127,6 +132,12 @@ struct iris_device {
 	struct hci_fm_spur_data spur_data;
 	unsigned char is_station_valid;
 	struct hci_fm_blend_table blend_tbl;
+//[++QC] it is added by SS. please check internally it is still required in the current project
+	int lna_gpio;
+//[--QC] it is added by SS. please check internally it is still required in the current project
+	char is_rds_grp_3A_enabled;
+	char is_ert_enabled;
+	char is_rt_plus_enabled;
 };
 
 static struct video_device *priv_videodev;
@@ -505,11 +516,10 @@ static void iris_q_event(struct iris_device *radio,
 {
 	struct kfifo *data_b;
 	unsigned char evt = event;
-
 	FMDBG("radio %pK event %d", radio, event);
 
 	if (unlikely(radio == NULL)) {
-		FMDERR(":radio is null\n");
+		FMDERR(":radio is null");
 		return;
 	}
 
@@ -521,7 +531,6 @@ static void iris_q_event(struct iris_device *radio,
 static int hci_send_frame(struct sk_buff *skb)
 {
 	struct radio_hci_dev *hdev;
-
 	FMDBG("skb %pK", skb);
 
 	if (unlikely(skb == NULL)) {
@@ -544,7 +553,6 @@ static void radio_hci_cmd_task(unsigned long arg)
 {
 	struct radio_hci_dev *hdev = (struct radio_hci_dev *) arg;
 	struct sk_buff *skb;
-
 	FMDBG("hdev %pK", hdev);
 
 	if (unlikely(hdev == NULL)) {
@@ -553,7 +561,7 @@ static void radio_hci_cmd_task(unsigned long arg)
 	}
 	if (!(atomic_read(&hdev->cmd_cnt))
 		&& time_after(jiffies, hdev->cmd_last_tx + HZ)) {
-		FMDERR("%s command tx timeout\n", hdev->name);
+		FMDERR("%s command tx timeout", hdev->name);
 		atomic_set(&hdev->cmd_cnt, 1);
 	}
 
@@ -577,7 +585,6 @@ static void radio_hci_rx_task(unsigned long arg)
 {
 	struct radio_hci_dev *hdev = (struct radio_hci_dev *) arg;
 	struct sk_buff *skb;
-
 	FMDBG("hdev %pK", hdev);
 
 	if (unlikely(hdev == NULL)) {
@@ -595,16 +602,15 @@ static void radio_hci_rx_task(unsigned long arg)
 int radio_hci_register_dev(struct radio_hci_dev *hdev)
 {
 	struct iris_device *radio = video_get_drvdata(video_get_dev());
-
 	FMDBG("radio %pK", radio);
 
 	if (!radio) {
-		FMDERR(":radio is null\n");
+		FMDERR(":radio is null");
 		return -EINVAL;
 	}
 
 	if (!hdev) {
-		FMDERR("hdev is null\n");
+		FMDERR("hdev is null");
 		return -EINVAL;
 	}
 
@@ -634,12 +640,12 @@ int radio_hci_unregister_dev(void)
 	struct radio_hci_dev *hdev = NULL;
 
 	if (!radio) {
-		FMDERR("radio is null\n");
+		FMDERR("radio is null");
 		return -EINVAL;
 	}
 	hdev = radio->fm_hdev;
 	if (!hdev) {
-		FMDERR("hdev is null\n");
+		FMDERR("hdev is null");
 		return -EINVAL;
 	}
 
@@ -657,7 +663,6 @@ EXPORT_SYMBOL(radio_hci_unregister_dev);
 int radio_hci_recv_frame(struct sk_buff *skb)
 {
 	struct radio_hci_dev *hdev;
-
 	FMDBG("hdev %pK", skb);
 
 	if (unlikely(skb == NULL)) {
@@ -666,7 +671,7 @@ int radio_hci_recv_frame(struct sk_buff *skb)
 	}
 	hdev = (struct radio_hci_dev *) skb->dev;
 	if (unlikely(!hdev)) {
-		FMDERR("%s hdev is null while receiving frame\n", hdev->name);
+		FMDERR("%s hdev is null while receiving frame", hdev->name);
 		kfree_skb(skb);
 		return -ENXIO;
 	}
@@ -686,7 +691,6 @@ int radio_hci_send_cmd(struct radio_hci_dev *hdev, __u16 opcode, __u32 plen,
 	struct radio_hci_command_hdr *hdr;
 	struct sk_buff *skb;
 	int ret = 0;
-
 	FMDBG("hdev %pK opcode %u len %u", hdev, opcode, plen);
 
 	if (unlikely(hdev == NULL)) {
@@ -694,8 +698,10 @@ int radio_hci_send_cmd(struct radio_hci_dev *hdev, __u16 opcode, __u32 plen,
 		return -EINVAL;
 	}
 	skb = alloc_skb(len, GFP_ATOMIC);
-	if (!skb)
+	if (!skb) {
+		FMDERR("%s no memory for command", hdev->name);
 		return -ENOMEM;
+	}
 
 	hdr = (struct radio_hci_command_hdr *) skb_put(skb,
 		RADIO_HCI_COMMAND_HDR_SIZE);
@@ -730,7 +736,7 @@ static int hci_fm_tone_generator(struct radio_hci_dev *hdev,
 	__u16 opcode = 0;
 
 	if (unlikely(radio == NULL)) {
-		FMDERR(":radio is null\n");
+		FMDERR(":radio is null");
 		return -EINVAL;
 	}
 	opcode = hci_opcode_pack(HCI_OGF_FM_DIAGNOSTIC_CMD_REQ,
@@ -1133,6 +1139,8 @@ static int hci_set_notch_filter_req(struct radio_hci_dev *hdev,
 	&notch_filter_val);
 }
 
+
+
 static int hci_fm_reset_req(struct radio_hci_dev *hdev, unsigned long param)
 {
 	__u16 opcode = 0;
@@ -1318,7 +1326,7 @@ static int radio_hci_err(__u32 code)
 	case 0x12:
 		return -EINVAL;
 	default:
-		return -EINVAL;
+		return -ENOSYS;
 	}
 }
 
@@ -1784,7 +1792,6 @@ static int hci_cmd_internal(unsigned int cmd, struct radio_hci_dev *hdev,
 	int ret = 0;
 	unsigned long arg = 0;
 	radio_hci_request_func radio_hci_request;
-
 	FMDBG("hdev %pK cmd 0x%x", hdev, cmd);
 
 	if (!hdev)
@@ -1941,7 +1948,6 @@ static void hci_cc_fm_disable_rsp(struct radio_hci_dev *hdev,
 {
 	__u8 status;
 	struct iris_device *radio = video_get_drvdata(video_get_dev());
-
 	FMDBG("hdev %pK skb %p", hdev, skb);
 
 	if (unlikely(radio == NULL)) {
@@ -1960,14 +1966,34 @@ static void hci_cc_fm_disable_rsp(struct radio_hci_dev *hdev,
 			iris_q_event(radio, IRIS_EVT_RADIO_DISABLED);
 		radio_hci_req_complete(hdev, status);
 		radio->mode = FM_OFF;
+		goto handle_rds;
 	} else if (radio->mode == FM_CALIB) {
 		radio_hci_req_complete(hdev, status);
+		return;
 	} else if ((radio->mode == FM_RECV) || (radio->mode == FM_TRANS)) {
 		iris_q_event(radio, IRIS_EVT_RADIO_DISABLED);
 		radio->mode = FM_OFF;
+		goto handle_rds;
 	} else if ((radio->mode == FM_TURNING_OFF) && (status != 0)) {
 		radio_hci_req_complete(hdev, status);
+		goto handle_rds;
 	}
+	handle_rds :
+	radio->g_rds_grp_proc_ps = 0;
+	memset(&radio->rds_grp, 0, sizeof(radio->rds_grp));
+	grp_mask = 0;
+	oda_agt = 0;
+	rt_plus_carrier = -1;
+	ert_carrier = -1;
+	memset(ert_buf, 0, 256);
+	ert_len = 0;
+	c_byt_pair_index = 0;
+	utf_8_flag = 0;
+	rt_ert_flag = 0;
+	formatting_dir = 0;
+	radio->is_ert_enabled = 0;
+	radio->is_rt_plus_enabled = 0;
+	radio->is_rds_grp_3A_enabled = 0;
 }
 
 static void hci_cc_conf_rsp(struct radio_hci_dev *hdev, struct sk_buff *skb)
@@ -1996,7 +2022,7 @@ static void hci_cc_fm_trans_get_conf_rsp(struct radio_hci_dev *hdev,
 	struct iris_device *radio = video_get_drvdata(video_get_dev());
 
 	if (unlikely(radio == NULL)) {
-		FMDERR(":radio is null\n");
+		FMDERR(":radio is null");
 		return;
 	}
 	if (unlikely(skb == NULL)) {
@@ -2018,11 +2044,10 @@ static void hci_cc_fm_enable_rsp(struct radio_hci_dev *hdev,
 {
 	struct hci_fm_conf_rsp  *rsp;
 	struct iris_device *radio = video_get_drvdata(video_get_dev());
-
 	FMDBG("hdev %pK skb %p", hdev, skb);
 
 	if (unlikely(radio == NULL)) {
-		FMDERR(":radio is null\n");
+		FMDERR(":radio is null");
 		return;
 	}
 
@@ -2048,7 +2073,7 @@ static void hci_cc_fm_trans_set_conf_rsp(struct radio_hci_dev *hdev,
 	struct iris_device *radio = video_get_drvdata(video_get_dev());
 
 	if (unlikely(radio == NULL)) {
-		FMDERR(":radio is null\n");
+		FMDERR(":radio is null");
 		return;
 	}
 
@@ -2071,7 +2096,7 @@ static void hci_cc_sig_threshold_rsp(struct radio_hci_dev *hdev,
 	struct iris_device *radio = video_get_drvdata(video_get_dev());
 
 	if (unlikely(radio == NULL)) {
-		FMDERR(":radio is null\n");
+		FMDERR(":radio is null");
 		return;
 	}
 	if (unlikely(skb == NULL)) {
@@ -2092,7 +2117,7 @@ static void hci_cc_station_rsp(struct radio_hci_dev *hdev, struct sk_buff *skb)
 	struct hci_fm_station_rsp *rsp;
 
 	if (unlikely(radio == NULL)) {
-		FMDERR(":radio is null\n");
+		FMDERR(":radio is null");
 		return;
 	}
 	if (unlikely(skb == NULL)) {
@@ -2155,7 +2180,7 @@ static void hci_cc_feature_list_rsp(struct radio_hci_dev *hdev,
 	struct iris_device *radio = video_get_drvdata(video_get_dev());
 
 	if (unlikely(radio == NULL)) {
-		FMDERR(":radio is null\n");
+		FMDERR(":radio is null");
 		return;
 	}
 
@@ -2181,7 +2206,7 @@ static void hci_cc_dbg_param_rsp(struct radio_hci_dev *hdev,
 	struct hci_fm_dbg_param_rsp *rsp;
 
 	if (unlikely(radio == NULL)) {
-		FMDERR(":radio is null\n");
+		FMDERR(":radio is null");
 		return;
 	}
 
@@ -2199,11 +2224,10 @@ static void iris_q_evt_data(struct iris_device *radio,
 				char *data, int len, int event)
 {
 	struct kfifo *data_b;
-
 	FMDBG("radio %pK data %p len %d event %d", radio, data, len, event);
 
 	if (unlikely(radio == NULL)) {
-		FMDERR(":radio is null\n");
+		FMDERR(":radio is null");
 		return;
 	}
 	data_b = &radio->data_buf[event];
@@ -2232,6 +2256,8 @@ static void hci_cc_riva_peek_rsp(struct radio_hci_dev *hdev,
 			memcpy(data, &skb->data[PEEK_DATA_OFSET], len);
 			iris_q_evt_data(radio, data, len, IRIS_BUF_PEEK);
 			kfree(data);
+		} else {
+			FMDERR("Memory allocation failed");
 		}
 	}
 
@@ -2246,7 +2272,7 @@ static void hci_cc_riva_read_default_rsp(struct radio_hci_dev *hdev,
 	__u8 len;
 
 	if (unlikely(radio == NULL)) {
-		FMDERR(":radio is null\n");
+		FMDERR(":radio is null");
 		return;
 	}
 	if (unlikely(skb == NULL)) {
@@ -2272,7 +2298,7 @@ static void hci_cc_get_spur_tbl(struct radio_hci_dev *hdev,
 	__u8 status;
 
 	if (unlikely(radio == NULL)) {
-		FMDERR(":radio is null\n");
+		FMDERR(":radio is null");
 		return;
 	}
 	if (unlikely(skb == NULL)) {
@@ -2307,6 +2333,8 @@ static void hci_cc_ssbi_peek_rsp(struct radio_hci_dev *hdev,
 			iris_q_evt_data(radio, data, SSBI_PEEK_LEN,
 					IRIS_BUF_SSBI_PEEK);
 			kfree(data);
+		} else {
+			FMDERR("Memory allocation failed");
 		}
 	}
 
@@ -2332,6 +2360,8 @@ static void hci_cc_rds_grp_cntrs_rsp(struct radio_hci_dev *hdev,
 			iris_q_evt_data(radio, data, RDS_GRP_CNTR_LEN,
 						IRIS_BUF_RDS_CNTRS);
 			kfree(data);
+		} else {
+			FMDERR("memory allocation failed");
 		}
 	}
 	radio_hci_req_complete(hdev, status);
@@ -2369,7 +2399,7 @@ static void hci_cc_get_ch_det_threshold_rsp(struct radio_hci_dev *hdev,
 	u8  status;
 
 	if (unlikely(radio == NULL)) {
-		FMDERR(":radio is null\n");
+		FMDERR(":radio is null");
 		return;
 	}
 	if (unlikely(skb == NULL)) {
@@ -2391,7 +2421,7 @@ static void hci_cc_get_blend_tbl_rsp(struct radio_hci_dev *hdev,
 	u8  status;
 
 	if (unlikely(radio == NULL)) {
-		FMDERR(":radio is null\n");
+		FMDERR(":radio is null");
 		return;
 	}
 	if (unlikely(skb == NULL)) {
@@ -2526,7 +2556,7 @@ static inline void hci_cmd_complete_event(struct radio_hci_dev *hdev,
 		hci_cc_get_blend_tbl_rsp(hdev, skb);
 		break;
 	default:
-		FMDERR("%s opcode 0x%x\n", hdev->name, opcode);
+		FMDERR("%s opcode 0x%x", hdev->name, opcode);
 		break;
 	}
 
@@ -2547,12 +2577,15 @@ static inline void hci_ev_tune_status(struct radio_hci_dev *hdev,
 	struct iris_device *radio = video_get_drvdata(video_get_dev());
 
 	if (unlikely(radio == NULL)) {
-		FMDERR(":radio is null\n");
+		FMDERR(":radio is null");
 		return;
 	}
 	memcpy(&radio->fm_st_rsp.station_rsp, &skb->data[0],
 				sizeof(struct hci_ev_tune_status));
-	iris_q_event(radio, IRIS_EVT_TUNE_SUCC);
+	if (radio->fm_st_rsp.station_rsp.sub_event == AF_JMP_TUNE)
+		iris_q_event(radio, IRIS_EVT_AFJMP);
+	else
+		iris_q_event(radio, IRIS_EVT_TUNE_SUCC);
 
 	for (i = 0; i < IRIS_BUF_MAX; i++) {
 		if (i >= IRIS_BUF_RT_RDS)
@@ -2595,7 +2628,7 @@ static inline void hci_ev_srch_st_list_compl(struct radio_hci_dev *hdev,
 	int len;
 
 	if (unlikely(radio == NULL)) {
-		FMDERR(":radio is null\n");
+		FMDERR(":radio is null");
 		return;
 	}
 
@@ -2604,8 +2637,10 @@ static inline void hci_ev_srch_st_list_compl(struct radio_hci_dev *hdev,
 		return;
 	}
 	ev = kmalloc(sizeof(*ev), GFP_ATOMIC);
-	if (!ev)
+	if (!ev) {
+		FMDERR("Memory allocation failed");
 		return;
+	}
 
 	ev->num_stations_found = skb->data[STN_NUM_OFFSET];
 	len = ev->num_stations_found * PARAMS_PER_STATION + STN_FREQ_OFFSET;
@@ -2667,7 +2702,7 @@ static void hci_ev_raw_rds_group_data(struct radio_hci_dev *hdev,
 	index = RDSGRP_DATA_OFFSET;
 
 	if (unlikely(radio == NULL)) {
-		FMDERR(":radio is null\n");
+		FMDERR(":radio is null");
 		return;
 	}
 
@@ -2681,6 +2716,9 @@ static void hci_ev_raw_rds_group_data(struct radio_hci_dev *hdev,
 			(skb->data[index]);
 		temp.rdsBlk[blocknum].rdsMsb =
 			(skb->data[index+1]);
+		temp.rdsBlk[blocknum].blockStatus =
+			(skb->data[RDSGRP_DATA_OFFSET + blocknum +
+			(RDS_BLOCKS_NUM << 1)]);
 		index = index + 2;
 	}
 
@@ -2699,6 +2737,8 @@ static void hci_ev_raw_rds_group_data(struct radio_hci_dev *hdev,
 			 *
 			 * similarly for rest grps
 			 */
+			if (!radio->is_ert_enabled)
+				break;
 			mask_bit = (((agt >> 1) << 1) + (agt & 1));
 			oda_agt = (1 << mask_bit);
 			utf_8_flag = (temp.rdsBlk[2].rdsLsb & 1);
@@ -2717,6 +2757,8 @@ static void hci_ev_raw_rds_group_data(struct radio_hci_dev *hdev,
 			 *
 			 * similarly for rest grps
 			 */
+			if (!radio->is_rt_plus_enabled)
+				break;
 			mask_bit = (((agt >> 1) << 1) + (agt & 1));
 			oda_agt =  (1 << mask_bit);
 			/*Extract 5th bit of MSB (b7b6b5b4b3b2b1b0)*/
@@ -2732,10 +2774,17 @@ static void hci_ev_raw_rds_group_data(struct radio_hci_dev *hdev,
 		}
 	} else {
 		carrier = gtc;
-		if (carrier == rt_plus_carrier)
+		if ((carrier == rt_plus_carrier)&&
+			radio->is_rt_plus_enabled) {
 			hci_ev_rt_plus(radio, temp);
-		else if (carrier == ert_carrier)
+		}else if ((carrier == ert_carrier) &&
+			radio->is_ert_enabled) {
 			hci_buff_ert(radio, &temp);
+		}else {
+			iris_q_evt_data(radio, (char *)(&temp),
+									sizeof (struct rds_grp_data), IRIS_BUF_RAW_RDS);
+			iris_q_event(radio, IRIS_EVT_NEW_RAW_RDS);
+		}
 	}
 }
 
@@ -2806,8 +2855,11 @@ static void hci_ev_ert(struct iris_device *radio)
 		data[1] = utf_8_flag;
 		data[2] = formatting_dir;
 		memcpy((data + 3), ert_buf, ert_len);
-		iris_q_evt_data(radio, data, (ert_len + 3), IRIS_BUF_ERT);
-		iris_q_event(radio, IRIS_EVT_NEW_ERT);
+		if (radio->is_ert_enabled) {
+			iris_q_evt_data(radio, data,
+				 (ert_len + 3), IRIS_BUF_ERT);
+			iris_q_event(radio, IRIS_EVT_NEW_ERT);
+		}
 		kfree(data);
 	}
 }
@@ -2818,8 +2870,15 @@ static void hci_ev_rt_plus(struct iris_device *radio,
 	char tag_type1, tag_type2;
 	char *data = NULL;
 	int len = 0;
+	int tags_num = 0;
+	char item_toggle;
+	char item_running;
 	unsigned short int agt;
 
+	item_toggle = EXTRACT_BIT(rds_buf.rdsBlk[1].rdsLsb,
+		ITEM_TOGGLE_BIT);
+	item_running = EXTRACT_BIT(rds_buf.rdsBlk[1].rdsLsb,
+		ITEM_RUNNING_BIT);
 	agt = AGT(rds_buf.rdsBlk[1].rdsLsb);
 	/*right most 3 bits of Lsb of block 2
 	 * and left most 3 bits of Msb of block 3
@@ -2829,27 +2888,32 @@ static void hci_ev_rt_plus(struct iris_device *radio,
 
 	/*right most 1 bit of lsb of 3rd block
 	 * and left most 5 bits of Msb of 4th block
-	 */
+	*/
 	tag_type2 = (((rds_buf.rdsBlk[2].rdsLsb & TAG2_MSB_MASK)
 			 << TAG2_MSB_OFFSET) |
 			 (rds_buf.rdsBlk[3].rdsMsb >> TAG2_LSB_OFFSET));
 
-	if (tag_type1 != DUMMY_CLASS)
+	if (tag_type1 != DUMMY_CLASS) {
 		len += RT_PLUS_LEN_1_TAG;
-	if (tag_type2 != DUMMY_CLASS)
+		tags_num++;
+	}
+	if (tag_type2 != DUMMY_CLASS) {
 		len += RT_PLUS_LEN_1_TAG;
-
+		tags_num++;
+	}
 	if (len != 0) {
-		len += 2;
+		len += 4;
 		data = kmalloc(len, GFP_ATOMIC);
 	} else {
 		FMDERR("Len is zero\n");
 		return;
 	}
 	if (data != NULL) {
-		data[0] = len;
+		data[0] = tags_num;
 		len = 1;
 		data[len++] = rt_ert_flag;
+		data[len++] = item_toggle;
+		data[len++] = item_running;
 		if (tag_type1 != DUMMY_CLASS) {
 			data[len++] = tag_type1;
 			/*start position of tag1
@@ -2888,9 +2952,14 @@ static void hci_ev_rt_plus(struct iris_device *radio,
 			data[len++] = (rds_buf.rdsBlk[3].rdsLsb
 						& TAG2_LEN_MASK) + 1;
 		}
-		iris_q_evt_data(radio, data, len, IRIS_BUF_RT_PLUS);
-		iris_q_event(radio,  IRIS_EVT_NEW_RT_PLUS);
+		if (radio->is_rt_plus_enabled) {
+			iris_q_evt_data(radio, data,
+				 len, IRIS_BUF_RT_PLUS);
+			iris_q_event(radio,  IRIS_EVT_NEW_RT_PLUS);
+		}
 		kfree(data);
+	} else {
+		FMDERR("memory allocation failed\n");
 	}
 }
 
@@ -2904,8 +2973,10 @@ static inline void hci_ev_program_service(struct radio_hci_dev *hdev,
 	len = (skb->data[RDS_PS_LENGTH_OFFSET] * RDS_STRING) + RDS_OFFSET;
 	iris_q_event(radio, IRIS_EVT_NEW_PS_RDS);
 	data = kmalloc(len, GFP_ATOMIC);
-	if (!data)
+	if (!data) {
+		FMDERR("Failed to allocate memory");
 		return;
+	}
 
 	data[0] = skb->data[RDS_PS_LENGTH_OFFSET];
 	data[1] = skb->data[RDS_PTYPE];
@@ -2937,8 +3008,10 @@ static inline void hci_ev_radio_text(struct radio_hci_dev *hdev,
 	while ((skb->data[len+RDS_OFFSET] != 0x0d) && (len < MAX_RT_LENGTH))
 		len++;
 	data = kmalloc(len+RDS_OFFSET, GFP_ATOMIC);
-	if (!data)
+	if (!data) {
+		FMDERR("Failed to allocate memory");
 		return;
+	}
 
 	data[0] = len;
 	data[1] = skb->data[RDS_PTYPE];
@@ -2968,7 +3041,7 @@ static void hci_ev_af_list(struct radio_hci_dev *hdev,
 	ev.pi_code = *((__le16 *) &skb->data[PI_CODE_OFFSET]);
 	ev.af_size = skb->data[AF_SIZE_OFFSET];
 	if (ev.af_size > AF_LIST_MAX) {
-		FMDERR("AF list size received more than available size\n");
+		FMDERR("AF list size received more than available size");
 		return;
 	}
 	memcpy(&ev.af_list[0], &skb->data[AF_LIST_OFFSET],
@@ -3028,7 +3101,7 @@ void radio_hci_event_packet(struct radio_hci_dev *hdev, struct sk_buff *skb)
 	u8 event;
 
 	if (skb == NULL) {
-		FMDERR("Socket buffer is NULL\n");
+		FMDERR("Socket buffer is NULL");
 		return;
 	}
 
@@ -3107,7 +3180,7 @@ static int iris_search(struct iris_device *radio, int on, int dir)
 	int saved_val;
 
 	if (unlikely(radio == NULL)) {
-		FMDERR(":radio is null\n");
+		FMDERR(":radio is null");
 		return -EINVAL;
 	}
 
@@ -3160,7 +3233,7 @@ static int set_low_power_mode(struct iris_device *radio, int power_mode)
 	struct hci_fm_rds_grp_req grp_3a;
 
 	if (unlikely(radio == NULL)) {
-		FMDERR(":radio is null\n");
+		FMDERR(":radio is null");
 		return -EINVAL;
 	}
 
@@ -3184,7 +3257,7 @@ static int set_low_power_mode(struct iris_device *radio, int power_mode)
 				&rds_grps_proc,
 				radio->fm_hdev);
 			if (retval < 0) {
-				FMDERR("Disable RDS failed\n");
+				FMDERR("Disable RDS failed");
 				return retval;
 			}
 			retval = hci_conf_event_mask(&radio->event_mask,
@@ -3200,7 +3273,7 @@ static int set_low_power_mode(struct iris_device *radio, int power_mode)
 			retval = hci_conf_event_mask(&radio->event_mask,
 				radio->fm_hdev);
 			if (retval < 0) {
-				FMDERR("Enable Async events failed\n");
+				FMDERR("Enable Async events failed");
 				return retval;
 			}
 			retval = hci_fm_rds_grps_process(
@@ -3217,7 +3290,7 @@ static int iris_recv_set_region(struct iris_device *radio, int req_region)
 	int saved_val;
 
 	if (unlikely(radio == NULL)) {
-		FMDERR(":radio is null\n");
+		FMDERR(":radio is null");
 		return -EINVAL;
 	}
 	saved_val = radio->region;
@@ -3240,7 +3313,7 @@ static int iris_trans_set_region(struct iris_device *radio, int req_region)
 	int saved_val;
 
 	if (unlikely(radio == NULL)) {
-		FMDERR(":radio is null\n");
+		FMDERR(":radio is null");
 		return -EINVAL;
 	}
 
@@ -3263,7 +3336,7 @@ static int iris_set_freq(struct iris_device *radio, unsigned int freq)
 	int retval;
 
 	if (unlikely(radio == NULL)) {
-		FMDERR(":radio is null\n");
+		FMDERR(":radio is null");
 		return -EINVAL;
 	}
 	retval = hci_fm_tune_station(&freq, radio->fm_hdev);
@@ -3298,11 +3371,10 @@ static int iris_do_calibration(struct iris_device *radio)
 {
 	char cal_mode = 0x00;
 	int retval = 0x00;
-
 	FMDBG("radio %pK", radio);
 
 	if (unlikely(radio == NULL)) {
-		FMDERR(":radio is null\n");
+		FMDERR(":radio is null");
 		return -EINVAL;
 	}
 
@@ -3311,21 +3383,21 @@ static int iris_do_calibration(struct iris_device *radio)
 	retval = hci_cmd(HCI_FM_ENABLE_RECV_CMD,
 			radio->fm_hdev);
 	if (retval < 0) {
-		FMDERR("Enable failed before calibration %x\n", retval);
+		FMDERR("Enable failed before calibration %x", retval);
 		radio->mode = FM_OFF;
 		return retval;
 	}
 	retval = radio_hci_request(radio->fm_hdev, hci_fm_do_cal_req,
 		(unsigned long)cal_mode, RADIO_HCI_TIMEOUT);
 	if (retval < 0) {
-		FMDERR("Do Process calibration failed %x\n", retval);
+		FMDERR("Do Process calibration failed %x", retval);
 		radio->mode = FM_RECV;
 		return retval;
 	}
 	retval = hci_cmd(HCI_FM_DISABLE_RECV_CMD,
 			radio->fm_hdev);
 	if (retval < 0)
-		FMDERR("Disable Failed after calibration %d\n", retval);
+		FMDERR("Disable Failed after calibration %d", retval);
 
 	return retval;
 }
@@ -3339,15 +3411,15 @@ static int iris_vidioc_g_ctrl(struct file *file, void *priv,
 	int lsb, msb;
 
 	if (unlikely(radio == NULL)) {
-		FMDERR(":radio is null\n");
+		FMDERR(":radio is null");
 		retval = -EINVAL;
-		goto end;
+		goto END;
 	}
 
 	if (ctrl == NULL) {
 		FMDERR("%s, v4l2 ctrl is null\n", __func__);
 		retval = -EINVAL;
-		goto end;
+		goto END;
 	}
 
 	FMDBG("id 0x%x", ctrl->id);
@@ -3443,7 +3515,7 @@ static int iris_vidioc_g_ctrl(struct file *file, void *priv,
 				retval = -EINVAL;
 		} else {
 			retval = -EINVAL;
-			FMDERR("Error in radio mode %d\n", retval);
+			FMDERR("Error in radio mode"" %d\n", retval);
 		}
 		break;
 	case V4L2_CID_PRIVATE_IRIS_RDS_STD:
@@ -3656,25 +3728,38 @@ static int iris_vidioc_g_ctrl(struct file *file, void *priv,
 	case V4L2_CID_PRIVATE_BLEND_SINRHI:
 		retval = hci_cmd(HCI_FM_GET_BLND_TBL_CMD, radio->fm_hdev);
 		if (retval < 0) {
-			FMDERR("Failed to get blend table %d", retval);
-			goto end;
+			FMDERR("Failed to get blend table  %d", retval);
+			goto END;
 		}
 		ctrl->value = radio->blend_tbl.scBlendSinrHi;
 		break;
 	case V4L2_CID_PRIVATE_BLEND_RMSSIHI:
 		retval = hci_cmd(HCI_FM_GET_BLND_TBL_CMD, radio->fm_hdev);
 		if (retval < 0) {
-			FMDERR("Failed to get blend table %d", retval);
-			goto end;
+			FMDERR("Failed to get blend table  %d", retval);
+			goto END;
 		}
 		ctrl->value = radio->blend_tbl.scBlendRmssiHi;
+		break;
+	case V4L2_CID_PRIVATE_SOFT_MUTE_TH:
+		rd.mode = DIG_AUDIO_0_MODE;
+		rd.length = DIG_AUDIO_0_LEN;
+		rd.param_len = 0;
+		rd.param = 0;
+
+		retval = hci_def_data_read(&rd, radio->fm_hdev);
+		if (retval == 0) {
+			ctrl->value = radio->default_data.data[SMUTE_TH_OFFSET];
+			if (ctrl->value > MAX_SOFTMUTE_TH)
+				ctrl->value -= 256;
+		}
 		break;
 	default:
 		retval = -EINVAL;
 		break;
 	}
 
-end:
+END:
 	if (retval > 0)
 		retval = -EINVAL;
 	if (ctrl != NULL && retval < 0)
@@ -3692,16 +3777,16 @@ static int iris_vidioc_g_ext_ctrls(struct file *file, void *priv,
 	struct hci_fm_def_data_rd_req default_data_rd;
 
 	if (unlikely(radio == NULL)) {
-		FMDERR(":radio is null\n");
+		FMDERR(":radio is null");
 		retval = -EINVAL;
-		goto end;
+		goto END;
 	}
 
 	if ((ctrl == NULL) || (ctrl->count == 0)
 		|| (ctrl->controls == NULL)) {
 		FMDERR("%s, invalid v4l2 ctrl\n", __func__);
 		retval = -EINVAL;
-		goto end;
+		goto END;
 	}
 
 	FMDBG("0x%x", ctrl->controls[0].id);
@@ -3712,7 +3797,7 @@ static int iris_vidioc_g_ext_ctrls(struct file *file, void *priv,
 		if (copy_from_user(&default_data_rd.mode, data,
 					sizeof(default_data_rd))) {
 			retval = -EFAULT;
-			goto end;
+			goto END;
 		}
 		retval = hci_def_data_read(&default_data_rd, radio->fm_hdev);
 		break;
@@ -3721,7 +3806,7 @@ static int iris_vidioc_g_ext_ctrls(struct file *file, void *priv,
 		break;
 	}
 
-end:
+END:
 	if (retval > 0)
 		retval = -EINVAL;
 
@@ -3747,17 +3832,17 @@ static int iris_vidioc_s_ext_ctrls(struct file *file, void *priv,
 	if (unlikely(radio == NULL)) {
 		FMDERR(":radio is null");
 		retval = -EINVAL;
-		goto end;
+		goto END;
 	}
 
 	if ((ctrl == NULL) || (ctrl->count == 0)
 		|| (ctrl->controls == NULL)) {
 		FMDERR("%s, invalid v4l2 ctrl\n", __func__);
 		retval = -EINVAL;
-		goto end;
+		goto END;
 	}
 
-	FMDBG("0x%x\n", ctrl->controls[0].id);
+	FMDBG("0x%x", ctrl->controls[0].id);
 	switch ((ctrl->controls[0]).id) {
 	case V4L2_CID_RDS_TX_PS_NAME:
 		FMDBG("In V4L2_CID_RDS_TX_PS_NAME\n");
@@ -3773,7 +3858,7 @@ static int iris_vidioc_s_ext_ctrls(struct file *file, void *priv,
 			FMDERR("%s: copy from user for tx ps name failed\n",
 				__func__);
 			retval = -EFAULT;
-			goto end;
+			goto END;
 		} else {
 			tx_ps.ps_control =  0x01;
 			tx_ps.pi = radio->pi;
@@ -3799,7 +3884,7 @@ static int iris_vidioc_s_ext_ctrls(struct file *file, void *priv,
 			FMDERR("%s: copy from user for tx rt failed\n",
 				 __func__);
 			retval = -EFAULT;
-			goto end;
+			goto END;
 		} else {
 			tx_rt.rt_control = 0x01;
 			tx_rt.pi = radio->pi;
@@ -3824,9 +3909,9 @@ static int iris_vidioc_s_ext_ctrls(struct file *file, void *priv,
 		 *	249 bytes - actual data to be configured
 		 */
 		if (ctrl->controls[0].size > (DEFAULT_DATA_SIZE + 2)) {
-			pr_err("%s: Default data buffer overflow\n", __func__);
+			pr_err("%s: Default data buffer overflow!\n", __func__);
 			retval = -EINVAL;
-			goto end;
+			goto END;
 		}
 
 		/* copy only 'size' bytes of data as requested by user */
@@ -3835,7 +3920,7 @@ static int iris_vidioc_s_ext_ctrls(struct file *file, void *priv,
 		if (retval > 0) {
 			FMDERR("Failed to copy %d bytes data\n", retval);
 			retval = -EFAULT;
-			goto end;
+			goto END;
 		}
 		FMDBG("XFR Mode\t: 0x%x", default_data.mode);
 		FMDBG("XFR Data Length\t: %d\n", default_data.length);
@@ -3849,7 +3934,7 @@ static int iris_vidioc_s_ext_ctrls(struct file *file, void *priv,
 		if (default_data.length != (ctrl->controls[0].size - 2)) {
 			FMDERR("Invalid 'length' parameter\n");
 			retval = -EINVAL;
-			goto end;
+			goto END;
 		}
 		retval = hci_def_data_write(&default_data, radio->fm_hdev);
 		break;
@@ -3857,16 +3942,16 @@ static int iris_vidioc_s_ext_ctrls(struct file *file, void *priv,
 		data = (ctrl->controls[0]).string;
 		bytes_to_copy = (ctrl->controls[0]).size;
 		if (bytes_to_copy < PROCS_CALIB_SIZE) {
-			FMDERR("data is less than required size\n");
+			FMDERR("data is less than required size");
 			retval = -EFAULT;
-			goto end;
+			goto END;
 		}
 		memset(proc_cal_req.data, 0, PROCS_CALIB_SIZE);
 		proc_cal_req.mode = PROCS_CALIB_MODE;
 		if (copy_from_user(&proc_cal_req.data[0],
 				data, sizeof(proc_cal_req.data))) {
 			retval = -EFAULT;
-			goto end;
+			goto END;
 		}
 		retval = radio_hci_request(radio->fm_hdev,
 				hci_fm_set_cal_req_proc,
@@ -3879,12 +3964,12 @@ static int iris_vidioc_s_ext_ctrls(struct file *file, void *priv,
 		if (copy_from_user(&bytes_to_copy, &((ctrl->controls[0]).size),
 					sizeof(bytes_to_copy))) {
 			retval = -EFAULT;
-			goto end;
+			goto END;
 		}
 		if (copy_from_user(&tmp_buf[0], &data[0],
 					sizeof(tmp_buf))) {
 			retval = -EFAULT;
-			goto end;
+			goto END;
 		}
 		spur_tbl_req.mode = tmp_buf[0];
 		spur_tbl_req.no_of_freqs_entries = tmp_buf[1];
@@ -3893,24 +3978,25 @@ static int iris_vidioc_s_ext_ctrls(struct file *file, void *priv,
 					bytes_to_copy - 2) ||
 		    ((spur_tbl_req.no_of_freqs_entries * SPUR_DATA_LEN) >
 					2 * FM_SPUR_TBL_SIZE)) {
-			FMDERR("Invalid data len: data[1] = %d, bytes = %zu\n",
+			FMDERR("Invalid data len: data[1] = %d, bytes = %zu",
 				spur_tbl_req.no_of_freqs_entries,
 				bytes_to_copy);
 			retval = -EINVAL;
-			goto end;
+			goto END;
 		}
 		spur_data =
 		    kmalloc((spur_tbl_req.no_of_freqs_entries * SPUR_DATA_LEN)
 							+ 2, GFP_ATOMIC);
 		if (!spur_data) {
+			FMDERR("Allocation failed for Spur data");
 			retval = -EFAULT;
-			goto end;
+			goto END;
 		}
 		if (copy_from_user(spur_data,
 				&data[2], (bytes_to_copy - 2))) {
 			kfree(spur_data);
 			retval = -EFAULT;
-			goto end;
+			goto END;
 		}
 
 		if (spur_tbl_req.no_of_freqs_entries <= ENTRIES_EACH_CMD) {
@@ -3929,9 +4015,9 @@ static int iris_vidioc_s_ext_ctrls(struct file *file, void *priv,
 					(unsigned long)&spur_tbl_req,
 					RADIO_HCI_TIMEOUT);
 			if (retval < 0) {
-				FMDERR("Spur command failed to execute\n");
+				FMDERR("Spur command failed to execute");
 				kfree(spur_data);
-				goto end;
+				goto END;
 			}
 			spur_tbl_req.mode = 0x02;/* 02-Continue mode */
 			spur_tbl_req.no_of_freqs_entries =
@@ -3949,11 +4035,11 @@ static int iris_vidioc_s_ext_ctrls(struct file *file, void *priv,
 		break;
 	default:
 		FMDBG("Shouldn't reach here\n");
-		retval = -EINVAL;
-		goto end;
+		retval = -1;
+		goto END;
 	}
 
-end:
+END:
 	if (retval > 0)
 		retval = -EINVAL;
 
@@ -3978,15 +4064,15 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 	unsigned int spur_freq;
 
 	if (unlikely(radio == NULL)) {
-		FMDERR(":radio is null\n");
+		FMDERR(":radio is null");
 		retval = -EINVAL;
-		goto end;
+		goto END;
 	}
 
 	if (ctrl == NULL) {
 		FMDERR("%s, v4l2 ctrl is null\n", __func__);
 		retval = -EINVAL;
-		goto end;
+		goto END;
 	}
 
 	FMDBG("id 0x%x", ctrl->id);
@@ -3995,7 +4081,7 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 		if (!is_valid_tone(ctrl->value)) {
 			retval = -EINVAL;
 			FMDERR("%s: tone value is not valid\n", __func__);
-			goto end;
+			goto END;
 		}
 		saved_val = radio->tone_freq;
 		radio->tone_freq = ctrl->value;
@@ -4003,7 +4089,7 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 				hci_fm_tone_generator, arg,
 				RADIO_HCI_TIMEOUT);
 		if (retval < 0) {
-			FMDERR("Error while setting the tone %d\n", retval);
+			FMDERR("Error while setting the tone %d", retval);
 			radio->tone_freq = saved_val;
 		}
 		break;
@@ -4013,7 +4099,7 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 		if (!is_valid_hard_mute(ctrl->value)) {
 			retval = -EINVAL;
 			FMDERR("%s: hard mute value is not valid\n", __func__);
-			goto end;
+			goto END;
 		}
 		saved_val = radio->mute_mode.hard_mute;
 		radio->mute_mode.hard_mute = ctrl->value;
@@ -4021,7 +4107,7 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 				&radio->mute_mode,
 				radio->fm_hdev);
 		if (retval < 0) {
-			FMDERR("Error while set FM hard mute %d\n",
+			FMDERR("Error while set FM hard mute"" %d\n",
 				retval);
 			radio->mute_mode.hard_mute = saved_val;
 		}
@@ -4032,7 +4118,7 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 		} else {
 			FMDERR("%s: srch mode is not valid\n", __func__);
 			retval = -EINVAL;
-			goto end;
+			goto END;
 		}
 		break;
 	case V4L2_CID_PRIVATE_IRIS_SCANDWELL:
@@ -4041,7 +4127,7 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 		} else {
 			FMDERR("%s: scandwell period is not valid\n", __func__);
 			retval = -EINVAL;
-			goto end;
+			goto END;
 		}
 		break;
 	case V4L2_CID_PRIVATE_IRIS_SRCHON:
@@ -4053,13 +4139,13 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 			if (radio->mode != FM_OFF) {
 				FMDERR("FM mode is not off %d\n", radio->mode);
 				retval = -EINVAL;
-				goto end;
+				goto END;
 			}
 			if (is_enable_rx_possible(radio) != 0) {
 				FMDERR("%s: fm is not in proper state\n",
 					 __func__);
 				retval = -EINVAL;
-				goto end;
+				goto END;
 			}
 			radio->mode = FM_RECV_TURNING_ON;
 			retval = hci_cmd(HCI_FM_ENABLE_RECV_CMD,
@@ -4067,16 +4153,16 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 			if (retval < 0) {
 				FMDERR("Enabling RECV FM fail %d\n", retval);
 				radio->mode = FM_OFF;
-				goto end;
+				goto END;
 			} else {
 				retval = initialise_recv(radio);
 				if (retval < 0) {
-					FMDERR("Error while initialising\n");
+					FMDERR("Error while initialising");
 					FMDERR("radio %d\n", retval);
 					hci_cmd(HCI_FM_DISABLE_RECV_CMD,
 							radio->fm_hdev);
 					radio->mode = FM_OFF;
-					goto end;
+					goto END;
 				}
 			}
 			if (radio->mode == FM_RECV_TURNING_ON) {
@@ -4087,7 +4173,7 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 		case FM_TRANS:
 			if (is_enable_tx_possible(radio) != 0) {
 				retval = -EINVAL;
-				goto end;
+				goto END;
 			}
 			radio->mode = FM_TRANS_TURNING_ON;
 			retval = hci_cmd(HCI_FM_ENABLE_TRANS_CMD,
@@ -4095,16 +4181,16 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 			if (retval < 0) {
 				FMDERR("Enabling TRANS FM fail %d\n", retval);
 				radio->mode = FM_OFF;
-				goto end;
+				goto END;
 			} else {
 				retval = initialise_trans(radio);
 				if (retval < 0) {
-					FMDERR("Error while initialising\n");
+					FMDERR("Error while initialising");
 					FMDERR("radio %d\n", retval);
 					hci_cmd(HCI_FM_DISABLE_TRANS_CMD,
 								radio->fm_hdev);
 					radio->mode = FM_OFF;
-					goto end;
+					goto END;
 				}
 			}
 			if (radio->mode == FM_TRANS_TURNING_ON) {
@@ -4120,10 +4206,10 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 				retval = hci_cmd(HCI_FM_DISABLE_RECV_CMD,
 						radio->fm_hdev);
 				if (retval < 0) {
-					FMDERR("Err on disable recv FM\n");
+					FMDERR("Err on disable recv FM");
 					FMDERR("%d\n", retval);
 					radio->mode = FM_RECV;
-					goto end;
+					goto END;
 				}
 				break;
 			case FM_TRANS:
@@ -4132,10 +4218,10 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 						radio->fm_hdev);
 
 				if (retval < 0) {
-					FMDERR("Err disabling trans FM\n");
+					FMDERR("Err disabling trans FM");
 					FMDERR("%d\n", retval);
 					radio->mode = FM_TRANS;
-					goto end;
+					goto END;
 				}
 				break;
 			default:
@@ -4157,7 +4243,7 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 				FMDERR("%s: fm is not in proper state\n",
 					__func__);
 				retval = -EINVAL;
-				goto end;
+				goto END;
 			}
 		}
 		break;
@@ -4165,7 +4251,7 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 		if (!is_valid_sig_th(ctrl->value)) {
 			retval = -EINVAL;
 			FMDERR("%s: sig threshold is not valid\n", __func__);
-			goto end;
+			goto END;
 		}
 		temp_val = ctrl->value;
 		retval = hci_fm_set_signal_threshold(
@@ -4173,7 +4259,7 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 				radio->fm_hdev);
 		if (retval < 0) {
 			FMDERR("Error while setting signal threshold\n");
-			goto end;
+			goto END;
 		}
 		break;
 	case V4L2_CID_PRIVATE_IRIS_SRCH_PTY:
@@ -4183,7 +4269,7 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 		} else {
 			FMDERR("%s: pty is not valid\n", __func__);
 			retval = -EINVAL;
-			goto end;
+			goto END;
 		}
 		break;
 	case V4L2_CID_PRIVATE_IRIS_SRCH_PI:
@@ -4192,7 +4278,7 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 		} else {
 			retval = -EINVAL;
 			FMDERR("%s: Pi is not valid\n", __func__);
-			goto end;
+			goto END;
 		}
 		break;
 	case V4L2_CID_PRIVATE_IRIS_SRCH_CNT:
@@ -4202,14 +4288,14 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 			retval = -EINVAL;
 			FMDERR("%s: srch station count is not valid\n",
 				__func__);
-			goto end;
+			goto END;
 		}
 		break;
 	case V4L2_CID_PRIVATE_IRIS_SPACING:
 		if (!is_valid_chan_spacing(ctrl->value)) {
 			retval = -EINVAL;
 			FMDERR("%s: channel spacing is not valid\n", __func__);
-			goto end;
+			goto END;
 		}
 		if (radio->mode == FM_RECV) {
 			saved_val = radio->recv_conf.ch_spacing;
@@ -4218,9 +4304,9 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 					&radio->recv_conf,
 						radio->fm_hdev);
 			if (retval < 0) {
-				FMDERR("Error in setting channel spacing\n");
+				FMDERR("Error in setting channel spacing");
 				radio->recv_conf.ch_spacing = saved_val;
-				goto end;
+				goto END;
 			}
 		}
 		break;
@@ -4228,7 +4314,7 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 		if (!is_valid_emphasis(ctrl->value)) {
 			retval = -EINVAL;
 			FMDERR("%s, emphasis is not valid\n", __func__);
-			goto end;
+			goto END;
 		}
 		switch (radio->mode) {
 		case FM_RECV:
@@ -4238,9 +4324,9 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 					&radio->recv_conf,
 						radio->fm_hdev);
 			if (retval < 0) {
-				FMDERR("Error in setting emphasis\n");
+				FMDERR("Error in setting emphasis");
 				radio->recv_conf.emphasis = saved_val;
-				goto end;
+				goto END;
 			}
 			break;
 		case FM_TRANS:
@@ -4250,22 +4336,22 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 					&radio->trans_conf,
 						radio->fm_hdev);
 			if (retval < 0) {
-				FMDERR("Error in setting emphasis\n");
+				FMDERR("Error in setting emphasis");
 				radio->trans_conf.emphasis = saved_val;
-				goto end;
+				goto END;
 			}
 			break;
 		default:
 			retval = -EINVAL;
 			FMDERR("FM mode is unknown %d\n", radio->mode);
-			goto end;
+			goto END;
 		}
 		break;
 	case V4L2_CID_PRIVATE_IRIS_RDS_STD:
 		if (!is_valid_rds_std(ctrl->value)) {
 			retval = -EINVAL;
 			FMDERR("%s: rds std is not valid\n", __func__);
-			goto end;
+			goto END;
 		}
 		switch (radio->mode) {
 		case FM_RECV:
@@ -4275,9 +4361,9 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 					&radio->recv_conf,
 						radio->fm_hdev);
 			if (retval < 0) {
-				FMDERR("Error in rds_std\n");
+				FMDERR("Error in rds_std");
 				radio->recv_conf.rds_std = saved_val;
-				goto end;
+				goto END;
 			}
 			break;
 		case FM_TRANS:
@@ -4287,22 +4373,22 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 					&radio->trans_conf,
 						radio->fm_hdev);
 			if (retval < 0) {
-				FMDERR("Error in rds_Std\n");
+				FMDERR("Error in rds_Std");
 				radio->trans_conf.rds_std = saved_val;
-				goto end;
+				goto END;
 			}
 			break;
 		default:
 			retval = -EINVAL;
 			FMDERR("%s: fm is not in proper state\n", __func__);
-			goto end;
+			goto END;
 		}
 		break;
 	case V4L2_CID_PRIVATE_IRIS_RDSON:
 		if (!is_valid_rds_std(ctrl->value)) {
 			retval = -EINVAL;
 			FMDERR("%s: rds std is not valid\n", __func__);
-			goto end;
+			goto END;
 		}
 		switch (radio->mode) {
 		case FM_RECV:
@@ -4312,9 +4398,9 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 					&radio->recv_conf,
 						radio->fm_hdev);
 			if (retval < 0) {
-				FMDERR("Error in rds_std\n");
+				FMDERR("Error in rds_std");
 				radio->recv_conf.rds_std = saved_val;
-				goto end;
+				goto END;
 			}
 			break;
 		case FM_TRANS:
@@ -4324,15 +4410,15 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 					&radio->trans_conf,
 						radio->fm_hdev);
 			if (retval < 0) {
-				FMDERR("Error in rds_Std\n");
+				FMDERR("Error in rds_Std");
 				radio->trans_conf.rds_std = saved_val;
-				goto end;
+				goto END;
 			}
 			break;
 		default:
 			retval = -EINVAL;
 			FMDERR("%s: fm is not in proper state\n", __func__);
-			goto end;
+			goto END;
 		}
 		break;
 	case V4L2_CID_PRIVATE_IRIS_RDSGROUP_MASK:
@@ -4345,8 +4431,77 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 		if (retval < 0) {
 			FMDERR("error in setting group mask\n");
 			radio->rds_grp.rds_grp_enable_mask = saved_val;
-			goto end;
+			goto END;
 		}
+		break;
+	case V4L2_CID_PRIVATE_IRIS_RDSGRP_RT:
+		if ((ctrl->value < 0) || (ctrl->value > 1))
+			return -EINVAL;
+		saved_val = radio->g_rds_grp_proc_ps;
+		radio->g_rds_grp_proc_ps &= ~(1 << RDS_RT_OFFSET);
+		radio->g_rds_grp_proc_ps |=
+			(ctrl->value << RDS_RT_OFFSET);
+		retval = hci_fm_rds_grps_process(
+				&radio->g_rds_grp_proc_ps,
+				radio->fm_hdev);
+		if (retval < 0) {
+			radio->g_rds_grp_proc_ps = saved_val;
+			FMDERR("error in setting group RT\n");
+			goto END;
+		}
+		break;
+	case V4L2_CID_PRIVATE_IRIS_RDSGRP_PS_SIMPLE:
+		saved_val = radio->g_rds_grp_proc_ps;
+		if ((ctrl->value < 0) || (ctrl->value > 1))
+			return -EINVAL;
+		radio->g_rds_grp_proc_ps &= ~(1 << RDS_PS_SIMPLE_OFFSET);
+		radio->g_rds_grp_proc_ps |=
+			(ctrl->value << RDS_PS_SIMPLE_OFFSET);
+		retval = hci_fm_rds_grps_process(
+				&radio->g_rds_grp_proc_ps,
+				radio->fm_hdev);
+		if (retval < 0) {
+			radio->g_rds_grp_proc_ps = saved_val;
+			FMDERR("error in setting group PS SIMPLE\n");
+			goto END;
+		}
+		break;
+	case V4L2_CID_PRIVATE_IRIS_RDSGRP_3A:
+		saved_val = grp_mask;
+		if ((ctrl->value < 0) || (ctrl->value > 1))
+			return -EINVAL;
+		grp_mask &= ~(1 << RDS_GRP_3A);
+		grp_mask |= (ctrl->value << RDS_GRP_3A);
+		radio->rds_grp.rds_grp_enable_mask = grp_mask;
+		radio->rds_grp.rds_buf_size = 1;
+		radio->rds_grp.en_rds_change_filter = 0;
+		retval = hci_fm_rds_grp(&radio->rds_grp, radio->fm_hdev);
+		if (retval < 0)
+			grp_mask = saved_val;
+		else
+			radio->is_rds_grp_3A_enabled = ctrl->value;
+		if (ctrl->value == 0) {
+			radio->is_rt_plus_enabled = 0;
+			radio->is_ert_enabled = 0;
+		}
+		break;
+	case V4L2_CID_PRIVATE_IRIS_RDSGRP_RT_PLUS:
+		retval = 0;
+		if ((ctrl->value == 1) && (radio->is_rds_grp_3A_enabled == 1))
+			radio->is_rt_plus_enabled = ctrl->value;
+		else if (ctrl->value == 0)
+			radio->is_rt_plus_enabled = ctrl->value;
+		else
+			retval = -EINVAL;
+		break;
+	case V4L2_CID_PRIVATE_IRIS_RDSGRP_ERT:
+		retval = 0;
+		if ((ctrl->value == 1) && (radio->is_rds_grp_3A_enabled == 1))
+			radio->is_ert_enabled = ctrl->value;
+		else if (ctrl->value == 0)
+			radio->is_ert_enabled = ctrl->value;
+		else
+			retval = -EINVAL;
 		break;
 	case V4L2_CID_PRIVATE_IRIS_RDSGROUP_PROC:
 		saved_val = radio->g_rds_grp_proc_ps;
@@ -4356,7 +4511,7 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 				radio->fm_hdev);
 		if (retval < 0) {
 			radio->g_rds_grp_proc_ps = saved_val;
-			goto end;
+			goto END;
 		}
 		break;
 	case V4L2_CID_PRIVATE_IRIS_RDSD_BUF:
@@ -4371,7 +4526,7 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 				radio->fm_hdev);
 		if (retval < 0) {
 			radio->g_rds_grp_proc_ps = saved_val;
-			goto end;
+			goto END;
 		}
 		break;
 	case V4L2_CID_PRIVATE_IRIS_AF_JUMP:
@@ -4387,7 +4542,7 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 				radio->fm_hdev);
 		if (retval < 0) {
 			radio->g_rds_grp_proc_ps = saved_val;
-			goto end;
+			goto END;
 		}
 		break;
 	case V4L2_CID_PRIVATE_IRIS_LP_MODE:
@@ -4397,13 +4552,13 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 		if (!is_valid_antenna(ctrl->value)) {
 			retval = -EINVAL;
 			FMDERR("%s: antenna type is not valid\n", __func__);
-			goto end;
+			goto END;
 		}
 		temp_val = ctrl->value;
 		retval = hci_fm_set_antenna(&temp_val, radio->fm_hdev);
 		if (retval < 0) {
-			FMDERR("Set Antenna failed retval = %x\n", retval);
-			goto end;
+			FMDERR("Set Antenna failed retval = %x", retval);
+			goto END;
 		}
 		radio->g_antenna =  ctrl->value;
 		break;
@@ -4413,7 +4568,7 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 		} else {
 			retval = -EINVAL;
 			FMDERR("%s: pty is not valid\n", __func__);
-			goto end;
+			goto END;
 		}
 		break;
 	case V4L2_CID_RDS_TX_PI:
@@ -4422,7 +4577,7 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 		} else {
 			retval = -EINVAL;
 			FMDERR("%s: pi is not valid\n", __func__);
-			goto end;
+			goto END;
 		}
 		break;
 	case V4L2_CID_PRIVATE_IRIS_STOP_RDS_TX_PS_NAME:
@@ -4441,7 +4596,7 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 		} else {
 			retval = -EINVAL;
 			FMDERR("%s: ps repeat count is not valid\n", __func__);
-			goto end;
+			goto END;
 		}
 		break;
 	case V4L2_CID_TUNE_POWER_LEVEL:
@@ -4458,7 +4613,7 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 		if (retval < 0) {
 			FMDERR("Default data read failed for PHY_CFG %d\n",
 				retval);
-			goto end;
+			goto END;
 		}
 		memset(&wrd, 0, sizeof(wrd));
 		wrd.mode = FM_TX_PHY_CFG_MODE;
@@ -4476,7 +4631,7 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 		if (!is_valid_soft_mute(ctrl->value)) {
 			retval = -EINVAL;
 			FMDERR("%s: soft mute is not valid\n", __func__);
-			goto end;
+			goto END;
 		}
 		saved_val = radio->mute_mode.soft_mute;
 		radio->mute_mode.soft_mute = ctrl->value;
@@ -4484,10 +4639,10 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 				&radio->mute_mode,
 				radio->fm_hdev);
 		if (retval < 0) {
-			FMDERR("Error while setting FM soft mute %d\n",
+			FMDERR("Error while setting FM soft mute"" %d\n",
 				retval);
 			radio->mute_mode.soft_mute = saved_val;
-			goto end;
+			goto END;
 		}
 		break;
 	case V4L2_CID_PRIVATE_IRIS_RIVA_ACCS_ADDR:
@@ -4499,7 +4654,7 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 		} else {
 			retval = -EINVAL;
 			FMDERR("%s: riva access len is not valid\n", __func__);
-			goto end;
+			goto END;
 		}
 		break;
 	case V4L2_CID_PRIVATE_IRIS_RIVA_POKE:
@@ -4518,7 +4673,7 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 #endif
 			if (retval != 0) {
 				retval = -retval;
-				goto end;
+				goto END;
 			}
 			radio->riva_data_req.cmd_params.subopcode =
 						RIVA_POKE_OPCODE;
@@ -4526,9 +4681,9 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 					&radio->riva_data_req,
 					radio->fm_hdev);
 		} else {
-			FMDERR("Can not copy into driver buffer\n");
+			FMDERR("Can not copy into driver's buffer.\n");
 			retval = -EINVAL;
-			goto end;
+			goto END;
 		}
 		break;
 	case V4L2_CID_PRIVATE_IRIS_SSBI_ACCS_ADDR:
@@ -4536,12 +4691,12 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 		break;
 	case V4L2_CID_PRIVATE_IRIS_SSBI_POKE:
 		radio->ssbi_data_accs.data = ctrl->value;
-		retval = hci_ssbi_poke_reg(&radio->ssbi_data_accs,
+		retval = hci_ssbi_poke_reg(&radio->ssbi_data_accs ,
 								radio->fm_hdev);
 		break;
 	case V4L2_CID_PRIVATE_IRIS_RIVA_PEEK:
 		radio->riva_data_req.cmd_params.subopcode = RIVA_PEEK_OPCODE;
-		ctrl->value = hci_peek_data(&radio->riva_data_req.cmd_params,
+		ctrl->value = hci_peek_data(&radio->riva_data_req.cmd_params ,
 						radio->fm_hdev);
 		break;
 	case V4L2_CID_PRIVATE_IRIS_SSBI_PEEK:
@@ -4556,19 +4711,19 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 			FMDERR("%s: reset counter value is not valid\n",
 				__func__);
 			retval = -EINVAL;
-			goto end;
+			goto END;
 		}
 		break;
 	case V4L2_CID_PRIVATE_IRIS_HLSI:
 		if (!is_valid_hlsi(ctrl->value)) {
 			FMDERR("%s: hlsi value is not valid\n", __func__);
 			retval = -EINVAL;
-			goto end;
+			goto END;
 		}
 		retval = hci_cmd(HCI_FM_GET_RECV_CONF_CMD,
 						radio->fm_hdev);
 		if (retval)
-			goto end;
+			goto END;
 		saved_val = radio->recv_conf.hlsi;
 		radio->recv_conf.hlsi = ctrl->value;
 		retval = hci_set_fm_recv_conf(
@@ -4585,7 +4740,7 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 		} else {
 			FMDERR("%s: notch filter is not valid\n", __func__);
 			retval = -EINVAL;
-			goto end;
+			goto END;
 		}
 		break;
 	case V4L2_CID_PRIVATE_INTF_HIGH_THRESHOLD:
@@ -4593,21 +4748,21 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 			FMDERR("%s: intf high threshold is not valid\n",
 				__func__);
 			retval = -EINVAL;
-			goto end;
+			goto END;
 		}
 		retval = hci_cmd(HCI_FM_GET_DET_CH_TH_CMD, radio->fm_hdev);
 		if (retval < 0) {
-			FMDERR("Fail to get chnl det thresholds %d\n", retval);
-			goto end;
+			FMDERR("Failed to get chnl det thresholds  %d", retval);
+			goto END;
 		}
 		saved_val = radio->ch_det_threshold.high_th;
 		radio->ch_det_threshold.high_th = ctrl->value;
 		retval = hci_set_ch_det_thresholds_req(&radio->ch_det_threshold,
 							 radio->fm_hdev);
 		if (retval < 0) {
-			FMDERR("Failed to set High det threshold %d\n", retval);
+			FMDERR("Failed to set High det threshold %d ", retval);
 			radio->ch_det_threshold.high_th = saved_val;
-			goto end;
+			goto END;
 		}
 		break;
 
@@ -4616,21 +4771,21 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 			FMDERR("%s: intf det low threshold is not valid\n",
 				__func__);
 			retval = -EINVAL;
-			goto end;
+			goto END;
 		}
 		retval = hci_cmd(HCI_FM_GET_DET_CH_TH_CMD, radio->fm_hdev);
 		if (retval < 0) {
-			FMDERR("Fail to get chnl det thresholds %d\n", retval);
-			goto end;
+			FMDERR("Failed to get chnl det thresholds  %d", retval);
+			goto END;
 		}
 		saved_val = radio->ch_det_threshold.low_th;
 		radio->ch_det_threshold.low_th = ctrl->value;
 		retval = hci_set_ch_det_thresholds_req(&radio->ch_det_threshold,
 							 radio->fm_hdev);
 		if (retval < 0) {
-			FMDERR("Fail to Set Low det threshold %d\n", retval);
+			FMDERR("Failed to Set Low det threshold %d", retval);
 			radio->ch_det_threshold.low_th = saved_val;
-			goto end;
+			goto END;
 		}
 		break;
 
@@ -4638,21 +4793,21 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 		if (!is_valid_sinr_th(ctrl->value)) {
 			FMDERR("%s: sinr threshold is not valid\n", __func__);
 			retval = -EINVAL;
-			goto end;
+			goto END;
 		}
 		retval = hci_cmd(HCI_FM_GET_DET_CH_TH_CMD, radio->fm_hdev);
 		if (retval < 0) {
-			FMDERR("Fail to get chnl det thresholds %d\n", retval);
-			goto end;
+			FMDERR("Failed to get chnl det thresholds  %d", retval);
+			goto END;
 		}
 		saved_val = radio->ch_det_threshold.sinr;
 		radio->ch_det_threshold.sinr = ctrl->value;
 		retval = hci_set_ch_det_thresholds_req(&radio->ch_det_threshold,
 							 radio->fm_hdev);
 		if (retval < 0) {
-			FMDERR("Fail to set SINR threshold %d\n", retval);
+			FMDERR("Failed to set SINR threshold %d", retval);
 			radio->ch_det_threshold.sinr = saved_val;
-			goto end;
+			goto END;
 		}
 		break;
 
@@ -4661,36 +4816,36 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 			FMDERR("%s: sinr samples count is not valid\n",
 				__func__);
 			retval = -EINVAL;
-			goto end;
+			goto END;
 		}
 		retval = hci_cmd(HCI_FM_GET_DET_CH_TH_CMD, radio->fm_hdev);
 		if (retval < 0) {
-			FMDERR("Fail to get chnl det thresholds %d\n", retval);
-			goto end;
+			FMDERR("Failed to get chnl det thresholds  %d", retval);
+			goto END;
 		}
 		saved_val = radio->ch_det_threshold.sinr_samples;
 		radio->ch_det_threshold.sinr_samples = ctrl->value;
 		retval = hci_set_ch_det_thresholds_req(&radio->ch_det_threshold,
 							 radio->fm_hdev);
-		if (retval < 0) {
-			FMDERR("Fail to set SINR samples %d\n", retval);
+	       if (retval < 0) {
+			FMDERR("Failed to set SINR samples  %d", retval);
 			radio->ch_det_threshold.sinr_samples = saved_val;
-			goto end;
+			goto END;
 		}
 		break;
 
 	case V4L2_CID_PRIVATE_IRIS_SRCH_ALGORITHM:
 	case V4L2_CID_PRIVATE_IRIS_SET_AUDIO_PATH:
 		/*
-		 * These private controls are place holders to keep the
-		 * driver compatible with changes done in the frameworks
-		 * which are specific to TAVARUA.
-		 */
+		These private controls are place holders to keep the
+		driver compatible with changes done in the frameworks
+		which are specific to TAVARUA.
+		*/
 		retval = 0;
 		break;
 	case V4L2_CID_PRIVATE_SPUR_FREQ:
 		if (radio->spur_table_size >= MAX_SPUR_FREQ_LIMIT) {
-			FMDERR("%s: Spur Table Full\n", __func__);
+			FMDERR("%s: Spur Table Full!\n", __func__);
 			retval = -1;
 		} else
 			radio->spur_data.freq[radio->spur_table_size] =
@@ -4698,7 +4853,7 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 		break;
 	case V4L2_CID_PRIVATE_SPUR_FREQ_RMSSI:
 		if (radio->spur_table_size >= MAX_SPUR_FREQ_LIMIT) {
-			FMDERR("%s: Spur Table Full\n", __func__);
+			FMDERR("%s: Spur Table Full!\n", __func__);
 			retval = -1;
 		} else
 			radio->spur_data.rmssi[radio->spur_table_size] =
@@ -4706,7 +4861,7 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 		break;
 	case V4L2_CID_PRIVATE_SPUR_SELECTION:
 		if (radio->spur_table_size >= MAX_SPUR_FREQ_LIMIT) {
-			FMDERR("%s: Spur Table Full\n", __func__);
+			FMDERR("%s: Spur Table Full!\n", __func__);
 			retval = -1;
 		} else {
 			radio->spur_data.enable[radio->spur_table_size] =
@@ -4720,9 +4875,9 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 	case V4L2_CID_PRIVATE_VALID_CHANNEL:
 		retval = hci_cmd(HCI_FM_GET_DET_CH_TH_CMD, radio->fm_hdev);
 		if (retval < 0) {
-			FMDERR("%s: Failed to determine channel validity\n",
+			FMDERR("%s: Failed to determine channel's validity\n",
 				__func__);
-			goto end;
+			goto END;
 		} else {
 			sinr_th = radio->ch_det_threshold.sinr;
 			intf_det_low_th = radio->ch_det_threshold.low_th;
@@ -4732,21 +4887,21 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 			!is_valid_intf_det_low_th(intf_det_low_th) ||
 			!is_valid_intf_det_hgh_th(intf_det_high_th)) {
 			retval = -EINVAL;
-			goto end;
+			goto END;
 		}
 		retval = hci_cmd(HCI_FM_GET_STATION_PARAM_CMD, radio->fm_hdev);
 		if (retval < 0) {
-			FMDERR("%s: Failed to determine channel validity\n",
+			FMDERR("%s: Failed to determine channel's validity\n",
 				__func__);
-			goto end;
+			goto END;
 		} else
 			sinr = radio->fm_st_rsp.station_rsp.sinr;
 
 		retval = hci_cmd(HCI_FM_STATION_DBG_PARAM_CMD, radio->fm_hdev);
 		if (retval < 0) {
-			FMDERR("%s: Failed to determine channel validity\n",
+			FMDERR("%s: Failed to determine channel's validity\n",
 				 __func__);
-			goto end;
+			goto END;
 		} else
 			intf_det_out = radio->st_dbg_param.in_det_out;
 
@@ -4764,8 +4919,8 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 
 		retval = hci_def_data_read(&rd, radio->fm_hdev);
 		if (retval < 0) {
-			FMDERR("default data read failed %x\n", retval);
-			goto end;
+			FMDERR("default data read failed %x", retval);
+			goto END;
 		}
 		wrd.mode = FM_RDS_CNFG_MODE;
 		wrd.length = FM_RDS_CNFG_LEN;
@@ -4785,8 +4940,8 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 
 		retval = hci_def_data_read(&rd, radio->fm_hdev);
 		if (retval < 0) {
-			FMDERR("default data read failed %x\n", retval);
-			goto end;
+			FMDERR("default data read failed %x", retval);
+			goto END;
 		}
 		wrd.mode = FM_RDS_CNFG_MODE;
 		wrd.length = FM_RDS_CNFG_LEN;
@@ -4805,8 +4960,8 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 
 		retval = hci_def_data_read(&rd, radio->fm_hdev);
 		if (retval < 0) {
-			FMDERR("default data read failed %x\n", retval);
-			goto end;
+			FMDERR("default data read failed %x", retval);
+			goto END;
 		}
 		wrd.mode = FM_RX_CONFG_MODE;
 		wrd.length = FM_RX_CNFG_LEN;
@@ -4825,8 +4980,8 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 
 		retval = hci_def_data_read(&rd, radio->fm_hdev);
 		if (retval < 0) {
-			FMDERR("default data read failed %x\n", retval);
-			goto end;
+			FMDERR("default data read failed %x", retval);
+			goto END;
 		}
 		wrd.mode = FM_RX_CONFG_MODE;
 		wrd.length = FM_RX_CNFG_LEN;
@@ -4845,8 +5000,8 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 
 		retval = hci_def_data_read(&rd, radio->fm_hdev);
 		if (retval < 0) {
-			FMDERR("default data read failed %x\n", retval);
-			goto end;
+			FMDERR("default data read failed %x", retval);
+			goto END;
 		}
 		wrd.mode = FM_RX_CONFG_MODE;
 		wrd.length = FM_RX_CNFG_LEN;
@@ -4865,8 +5020,8 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 
 		retval = hci_def_data_read(&rd, radio->fm_hdev);
 		if (retval < 0) {
-			FMDERR("default data read failed %x\n", retval);
-			goto end;
+			FMDERR("default data read failed %x", retval);
+			goto END;
 		}
 		wrd.mode = FM_RX_CONFG_MODE;
 		wrd.length = FM_RX_CNFG_LEN;
@@ -4885,8 +5040,8 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 
 		retval = hci_def_data_read(&rd, radio->fm_hdev);
 		if (retval < 0) {
-			FMDERR("default data read failed %x\n", retval);
-			goto end;
+			FMDERR("default data read failed %x", retval);
+			goto END;
 		}
 		wrd.mode = FM_RX_CONFG_MODE;
 		wrd.length = FM_RX_CNFG_LEN;
@@ -4900,6 +5055,54 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 		if (retval < 0)
 			FMDERR("set CF0 Threshold failed\n");
 		break;
+	case V4L2_CID_PRIVATE_SOFT_MUTE_TH:
+		rd.mode = DIG_AUDIO_0_MODE;
+		rd.length = DIG_AUDIO_0_LEN;
+		rd.param_len = 0;
+		rd.param = 0;
+
+		retval = hci_def_data_read(&rd, radio->fm_hdev);
+		if (retval < 0) {
+			FMDERR("default data read failed %x", retval);
+			return retval;
+		}
+		wrd.mode = DIG_AUDIO_0_MODE;
+		wrd.length = DIG_AUDIO_0_LEN;
+		memcpy(&wrd.data, &radio->default_data.data,
+				radio->default_data.ret_data_len);
+		wrd.data[SMUTE_TH_OFFSET] = ctrl->value;
+		retval = hci_def_data_write(&wrd, radio->fm_hdev);
+		if (retval < 0)
+			FMDERR("Set Soft mute Threshold failed\n");
+		break;
+	case V4L2_CID_PRIVATE_IRIS_RDSGRP_ALL:
+		if((ctrl->value < 0) || (ctrl->value > 1)) {
+			retval = -EINVAL;
+			break;
+		}
+		if (ctrl->value == 0) {
+			radio->rds_grp.rds_grp_enable_mask = 0;
+		} else {
+			radio->rds_grp.rds_grp_enable_mask = RDS_GRPS_ALL;
+
+			radio->rds_grp.rds_buf_size = 1;
+			radio->rds_grp.en_rds_change_filter = 0;
+			retval = hci_fm_rds_grp(&radio->rds_grp,
+				radio->fm_hdev);
+			if (retval < 0) {
+				FMDERR("error in setting all group mask\n");
+			} else if(ctrl->value == 0){
+				grp_mask = 0;
+				oda_agt = 0;
+				radio->is_rds_grp_3A_enabled = 0;
+				radio->is_rt_plus_enabled = 0;
+				radio->is_ert_enabled = 0;
+			} else {
+				grp_mask = RDS_GRPS_ALL;
+				radio->is_rds_grp_3A_enabled = 1;
+			}
+		}
+		break;
 	case V4L2_CID_PRIVATE_RXREPEATCOUNT:
 		rd.mode = RDS_PS0_XFR_MODE;
 		rd.length = RDS_PS0_LEN;
@@ -4908,8 +5111,8 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 
 		retval = hci_def_data_read(&rd, radio->fm_hdev);
 		if (retval < 0) {
-			FMDERR("default data read failed for PS0 %x\n", retval);
-			goto end;
+			FMDERR("default data read failed for PS0 %x", retval);
+			goto END;
 		}
 		wrd.mode = RDS_PS0_XFR_MODE;
 		wrd.length = RDS_PS0_LEN;
@@ -4935,19 +5138,19 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 			FMDERR("%s: blend sinr count is not valid\n",
 				__func__);
 			retval = -EINVAL;
-			goto end;
+			goto END;
 		}
 		retval = hci_cmd(HCI_FM_GET_BLND_TBL_CMD, radio->fm_hdev);
 		if (retval < 0) {
-			FMDERR("Failed to get blend table %d\n", retval);
-			goto end;
+			FMDERR("Failed to get blend table  %d", retval);
+			goto END;
 		}
 		radio->blend_tbl.scBlendSinrHi = ctrl->value;
 		retval = hci_set_blend_tbl_req(&radio->blend_tbl,
 					 radio->fm_hdev);
 		if (retval < 0) {
-			FMDERR("Failed to set blend table %d\n", retval);
-			goto end;
+			FMDERR("Failed to set blend tble %d ", retval);
+			goto END;
 		}
 		break;
 	case V4L2_CID_PRIVATE_BLEND_RMSSIHI:
@@ -4955,19 +5158,19 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 			FMDERR("%s: blend rmssi count is not valid\n",
 				__func__);
 			retval = -EINVAL;
-			goto end;
+			goto END;
 		}
 		retval = hci_cmd(HCI_FM_GET_BLND_TBL_CMD, radio->fm_hdev);
 		if (retval < 0) {
-			FMDERR("Failed to get blend table %d\n", retval);
-			goto end;
+			FMDERR("Failed to get blend table  %d", retval);
+			goto END;
 		}
 		radio->blend_tbl.scBlendRmssiHi = ctrl->value;
 		retval = hci_set_blend_tbl_req(&radio->blend_tbl,
 					 radio->fm_hdev);
 		if (retval < 0) {
-			FMDERR("Failed to set blend table %d\n", retval);
-			goto end;
+			FMDERR("Failed to set blend tble %d ", retval);
+			goto END;
 		}
 		break;
 	default:
@@ -4975,7 +5178,7 @@ static int iris_vidioc_s_ctrl(struct file *file, void *priv,
 		break;
 	}
 
-end:
+END:
 	if (retval > 0)
 		retval = -EINVAL;
 
@@ -4994,7 +5197,7 @@ static int update_spur_table(struct iris_device *radio)
 	default_data.mode = CKK_SPUR;
 
 	if (unlikely(radio == NULL)) {
-		FMDERR(":radio is null\n");
+		FMDERR(":radio is null");
 		return -EINVAL;
 	}
 	temp = radio->spur_table_size;
@@ -5068,7 +5271,7 @@ static int iris_vidioc_g_tuner(struct file *file, void *priv,
 	struct iris_device *radio = video_get_drvdata(video_devdata(file));
 
 	if (unlikely(radio == NULL)) {
-		FMDERR(":radio is null\n");
+		FMDERR(":radio is null");
 		return -EINVAL;
 	}
 	if (tuner == NULL) {
@@ -5076,13 +5279,13 @@ static int iris_vidioc_g_tuner(struct file *file, void *priv,
 		return -EINVAL;
 	}
 	if (tuner->index > 0) {
-		FMDERR("Invalid Tuner Index\n");
+		FMDERR("Invalid Tuner Index");
 		return -EINVAL;
 	}
 	if (radio->mode == FM_RECV) {
 		retval = hci_cmd(HCI_FM_GET_STATION_PARAM_CMD, radio->fm_hdev);
 		if (retval < 0) {
-			FMDERR("Failed to Get station params\n");
+			FMDERR("Failed to Get station params");
 			return retval;
 		}
 		tuner->type = V4L2_TUNER_RADIO;
@@ -5118,7 +5321,7 @@ static int iris_vidioc_s_tuner(struct file *file, void *priv,
 	int retval = 0;
 
 	if (unlikely(radio == NULL)) {
-		FMDERR(":radio is null\n");
+		FMDERR(":radio is null");
 		return -EINVAL;
 	}
 
@@ -5149,9 +5352,10 @@ static int iris_vidioc_s_tuner(struct file *file, void *priv,
 			FMDERR(": set tuner failed with %d\n", retval);
 		return retval;
 	} else if (radio->mode == FM_TRANS) {
-		radio->trans_conf.band_low_limit = tuner->rangelow / TUNE_PARAM;
-		radio->trans_conf.band_high_limit =
-			tuner->rangehigh / TUNE_PARAM;
+			radio->trans_conf.band_low_limit =
+				tuner->rangelow / TUNE_PARAM;
+			radio->trans_conf.band_high_limit =
+				tuner->rangehigh / TUNE_PARAM;
 	} else
 		return -EINVAL;
 
@@ -5185,15 +5389,15 @@ static int iris_vidioc_s_frequency(struct file *file, void *priv,
 	f = (freq->frequency / TUNE_PARAM);
 
 	if (unlikely(radio == NULL)) {
-		FMDERR(":radio is null\n");
+		FMDERR(":radio is null");
 		return -EINVAL;
 	}
 	if (freq->type != V4L2_TUNER_RADIO)
 		return -EINVAL;
 
 	/* We turn off RDS prior to tuning to a new station.
-	 * because of a bug in SoC which prevents tuning
-	 * during RDS transmission.
+	   because of a bug in SoC which prevents tuning
+	   during RDS transmission.
 	 */
 	if (radio->mode == FM_TRANS
 		&& (radio->trans_conf.rds_std == 0 ||
@@ -5220,11 +5424,24 @@ static int iris_vidioc_s_frequency(struct file *file, void *priv,
 	return retval;
 }
 
+//[++QC] it is added by SS. please check internally it is still required in the current project
+static int iris_fops_open(struct file *file)
+{
+	struct iris_device *radio = video_get_drvdata(video_devdata(file));
+
+	FMDBG("Enter %s ", __func__);
+
+	if (gpio_is_valid(radio->lna_gpio))
+		gpio_set_value(radio->lna_gpio, 1);
+
+	return 0;
+}
+//[--QC] it is added by SS. please check internally it is still required in the current project
+
 static int iris_fops_release(struct file *file)
 {
 	struct iris_device *radio = video_get_drvdata(video_devdata(file));
 	int retval = 0;
-
 	FMDBG("radio %pK", radio);
 
 	if (radio == NULL)
@@ -5234,7 +5451,7 @@ static int iris_fops_release(struct file *file)
 	mutex_lock(&radio->lock);
 
 	if (radio->mode == FM_OFF)
-		goto end;
+		goto END;
 
 	if (radio->mode == FM_RECV) {
 		radio->is_fm_closing = true;
@@ -5255,7 +5472,7 @@ static int iris_fops_release(struct file *file)
 		mutex_unlock(&radio->lock);
 		return retval;
 	}
-end:
+END:
 	FMDBG("mode %d", radio->mode);
 	mutex_lock(&fm_smd_enable);
 	if (radio->fm_hdev != NULL)
@@ -5266,6 +5483,11 @@ end:
 
 	if (retval < 0)
 		FMDERR("Err on disable FM %d\n", retval);
+
+//[++QC] it is added by SS. please check internally it is still required in the current project
+	if (gpio_is_valid(radio->lna_gpio))
+		gpio_set_value(radio->lna_gpio, 0);
+//[--QC] it is added by SS. please check internally it is still required in the current project
 
 	FMDBG("ret %d", retval);
 	return retval;
@@ -5331,7 +5553,6 @@ static int iris_vidioc_dqbuf(struct file *file, void *priv,
 	struct kfifo *data_fifo = NULL;
 	unsigned char *buf = NULL;
 	unsigned int len = 0, retval = -1;
-
 	FMDBG("buffer %pK", buffer);
 
 	if ((radio == NULL) || (buffer == NULL)) {
@@ -5396,13 +5617,12 @@ static int iris_vidioc_querycap(struct file *file, void *priv,
 	struct v4l2_capability *capability)
 {
 	struct iris_device *radio;
-
 	FMDBG("caps %pK", capability);
 
 	radio = video_get_drvdata(video_devdata(file));
 
 	if (unlikely(radio == NULL)) {
-		FMDERR(":radio is null\n");
+		FMDERR(":radio is null");
 		return -EINVAL;
 	}
 	if (capability == NULL) {
@@ -5425,11 +5645,10 @@ static int iris_vidioc_querycap(struct file *file, void *priv,
 static int initialise_recv(struct iris_device *radio)
 {
 	int retval;
-
 	FMDBG("radio %pK", radio);
 
 	if (unlikely(radio == NULL)) {
-		FMDERR(":radio is null\n");
+		FMDERR(":radio is null");
 		return -EINVAL;
 	}
 
@@ -5442,7 +5661,7 @@ static int initialise_recv(struct iris_device *radio)
 		return retval;
 	}
 
-	radio->stereo_mode.stereo_mode = CTRL_OFF;
+	radio->stereo_mode.stereo_mode = CTRL_ON;
 	radio->stereo_mode.sig_blend = sig_blend;
 	radio->stereo_mode.intf_blend = CTRL_ON;
 	radio->stereo_mode.most_switch = CTRL_ON;
@@ -5457,7 +5676,7 @@ static int initialise_recv(struct iris_device *radio)
 	radio->event_mask = SIG_LEVEL_INTR | RDS_SYNC_INTR | AUDIO_CTRL_INTR;
 	retval = hci_conf_event_mask(&radio->event_mask, radio->fm_hdev);
 	if (retval < 0) {
-		FMDERR("Enable Async events failed\n");
+		FMDERR("Enable Async events failed");
 		return retval;
 	}
 
@@ -5489,7 +5708,7 @@ static int is_enable_rx_possible(struct iris_device *radio)
 	int retval = 1;
 
 	if (unlikely(radio == NULL)) {
-		FMDERR(":radio is null\n");
+		FMDERR(":radio is null");
 		return -EINVAL;
 	}
 
@@ -5532,6 +5751,9 @@ static const struct v4l2_file_operations iris_fops = {
 #ifdef CONFIG_COMPAT
 	.compat_ioctl32 = v4l2_compat_ioctl32,
 #endif
+//[++QC] it is added by SS. please check internally it is still required in the current project
+	.open		= iris_fops_open,
+//[--QC] it is added by SS. please check internally it is still required in the current project
 	.release        = iris_fops_release,
 };
 
@@ -5553,7 +5775,6 @@ static int iris_probe(struct platform_device *pdev)
 	int retval;
 	int radio_nr = -1;
 	int i;
-
 	FMDBG("pdev %pK", pdev);
 
 	if (!pdev) {
@@ -5562,14 +5783,30 @@ static int iris_probe(struct platform_device *pdev)
 	}
 
 	radio = kzalloc(sizeof(struct iris_device), GFP_KERNEL);
-	if (!radio)
+	if (!radio) {
+		FMDERR(": Could not allocate radio device\n");
 		return -ENOMEM;
+	}
 
 	radio->dev = &pdev->dev;
 	platform_set_drvdata(pdev, radio);
+//[++QC] it is added by SS. please check internally it is still required in the current project
+	if (radio->dev->of_node) {
+		radio->lna_gpio = of_get_named_gpio(radio->dev->of_node,
+					"qcom,radio-lna-en", 0);
+	}
 
+	if (gpio_is_valid(radio->lna_gpio)) {
+		retval = gpio_request(radio->lna_gpio, "FM_LNA_EN");
+		if (retval)
+			FMDERR(": Could not request gpio: %d\n", radio->lna_gpio);
+
+		gpio_direction_output(radio->lna_gpio, 0);
+	}
+//[--QC] it is added by SS. please check internally it is still required in the current project
 	radio->videodev = video_device_alloc();
 	if (!radio->videodev) {
+		FMDERR(": Could not allocate V4L device\n");
 		kfree(radio);
 		return -ENOMEM;
 	}
@@ -5620,7 +5857,7 @@ static int iris_probe(struct platform_device *pdev)
 
 	video_set_drvdata(radio->videodev, radio);
 
-	if (video_get_drvdata(radio->videodev) == NULL)
+	if (NULL == video_get_drvdata(radio->videodev))
 		FMDERR(": video_get_drvdata failed\n");
 
 	retval = video_register_device(radio->videodev, VFL_TYPE_RADIO,
@@ -5655,7 +5892,7 @@ static int iris_remove(struct platform_device *pdev)
 	struct iris_device *radio = platform_get_drvdata(pdev);
 
 	if (radio == NULL) {
-		FMDERR(":radio is null\n");
+		FMDERR(":radio is null");
 		return -EINVAL;
 	}
 	video_unregister_device(radio->videodev);

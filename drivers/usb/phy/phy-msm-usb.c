@@ -51,6 +51,11 @@
 #include <linux/qpnp/qpnp-adc.h>
 
 #include <linux/msm-bus.h>
+#if defined(CONFIG_USB_HOST_NOTIFY)
+#include <linux/host_notify.h>
+#endif
+#undef dev_dbg
+#define dev_dbg dev_err
 
 /**
  * Requested USB votes for BUS bandwidth
@@ -259,8 +264,8 @@ unsigned int lpm_disconnect_thresh = 1000;
 module_param(lpm_disconnect_thresh, uint, 0644);
 MODULE_PARM_DESC(lpm_disconnect_thresh,
 	"Delay before entering LPM on USB disconnect");
-
-static bool floated_charger_enable;
+//Bug 432430 gudi.wt,MODIFIY,20200213,Non-standard charge is recognized as usb modification, setting non-standard charge current [152496]
+static bool floated_charger_enable = 1;
 module_param(floated_charger_enable, bool, 0644);
 MODULE_PARM_DESC(floated_charger_enable,
 	"Whether to enable floated charger");
@@ -274,8 +279,8 @@ MODULE_PARM_DESC(enable_dbg_log, "Debug buffer events");
 static int dcp_max_current = IDEV_CHG_MAX;
 module_param(dcp_max_current, int, 0644);
 MODULE_PARM_DESC(dcp_max_current, "max current drawn for DCP charger");
-
-static bool chg_detection_for_float_charger;
+//Bug 432430 gudi.wt,MODIFIY,20200213,Non-standard charge is recognized as usb modification, setting non-standard charge current [152496]
+static bool chg_detection_for_float_charger = 1;
 module_param(chg_detection_for_float_charger, bool, 0644);
 MODULE_PARM_DESC(chg_detection_for_float_charger,
 	"Whether to do PHY based charger detection for float chargers");
@@ -294,6 +299,9 @@ static u32 bus_freqs[USB_NOC_NUM_VOTE][USB_NUM_BUS_CLOCKS]  /*bimc,snoc,pcnoc*/;
 static char bus_clkname[USB_NUM_BUS_CLOCKS][20] = {"bimc_clk", "snoc_clk",
 						"pcnoc_clk"};
 static bool bus_clk_rate_set;
+#if defined(CONFIG_USB_HOST_NOTIFY)
+struct host_notify_dev ndev;
+#endif
 
 static void dbg_inc(unsigned int *idx)
 {
@@ -2046,6 +2054,9 @@ static void msm_otg_start_host(struct usb_otg *otg, int on)
 	pm_runtime_get_sync(otg->usb_phy->dev);
 	if (on) {
 		dev_dbg(otg->usb_phy->dev, "host on\n");
+#if defined(CONFIG_USB_HOST_NOTIFY)
+		host_state_notify(&ndev, NOTIFY_HOST_ADD);
+#endif
 		msm_otg_dbg_log_event(&motg->phy, "HOST ON",
 				motg->inputs, otg->state);
 		msm_hsusb_vbus_power(motg, 1);
@@ -2073,6 +2084,9 @@ static void msm_otg_start_host(struct usb_otg *otg, int on)
 				msecs_to_jiffies(1000 * PM_QOS_SAMPLE_SEC));
 	} else {
 		dev_dbg(otg->usb_phy->dev, "host off\n");
+#if defined(CONFIG_USB_HOST_NOTIFY)
+		host_state_notify(&ndev, NOTIFY_HOST_REMOVE);
+#endif
 		msm_otg_dbg_log_event(&motg->phy, "HOST OFF",
 				motg->inputs, otg->state);
 		msm_hsusb_vbus_power(motg, 0);
@@ -2592,6 +2606,11 @@ static void msm_chg_detect_work(struct work_struct *w)
 		vout = msm_chg_check_primary_det(motg);
 		line_state = readl_relaxed(USB_PORTSC) & PORTSC_LS;
 		dm_vlgc = line_state & PORTSC_LS_DM;
+		//+Bug 432430 gudi.wt,MODIFIY,20200213,Non-standard charge is recognized as usb modification, setting non-standard charge current [152496]
+		dev_info(phy->dev,"WT vout=%d,dm_vlgc=%d,line_state=%d,dcd=%d\n",
+			vout,dm_vlgc,line_state,dcd);
+		//-Bug 432430 gudi.wt,MODIFIY,20200213,Non-standard charge is recognized as usb modification, setting non-standard charge current [152496]
+
 		if (vout && !dm_vlgc) { /* VDAT_REF < DM < VLGC */
 			if (line_state) { /* DP > VLGC */
 				motg->chg_type = USB_NONCOMPLIANT_CHARGER;
@@ -3036,12 +3055,15 @@ static void msm_otg_set_vbus_state(int online)
 	 *    VBUS notification with FLOAT psy type and we want to do PHY based
 	 *    charger detection by setting 'chg_detection_for_float_charger'.
 	 */
+	//+Bug 432430 gudi.wt,MODIFIY,20200213,Non-standard charge is recognized as usb modification, setting non-standard charge current [152496]
 	if (test_bit(B_SESS_VLD, &motg->inputs) && !motg->chg_detection) {
 		if ((get_psy_type(motg) == POWER_SUPPLY_TYPE_UNKNOWN) ||
+			(get_psy_type(motg) == POWER_SUPPLY_TYPE_USB) ||
 		    (get_psy_type(motg) == POWER_SUPPLY_TYPE_USB_FLOAT &&
 		     chg_detection_for_float_charger))
 			motg->chg_detection = true;
 	}
+	//-Bug 432430 gudi.wt,MODIFIY,20200213,Non-standard charge is recognized as usb modification, setting non-standard charge current [152496]
 
 	if (motg->chg_detection)
 		queue_delayed_work(motg->otg_wq, &motg->chg_work, 0);
@@ -4587,6 +4609,14 @@ static int msm_otg_probe(struct platform_device *pdev)
 		}
 	}
 
+#if defined(CONFIG_USB_HOST_NOTIFY)
+	ndev.name = "usb_otg";
+	ret = host_notify_dev_register(&ndev);
+	if (ret < 0) {
+		pr_err("host_notify_dev_register is failed\n");
+	}
+#endif
+
 	/*
 	 * Try to register extcon handle from probe; by this time USB psy may or
 	 * may not have been registered. If this fails, then wait for the USB
@@ -4782,6 +4812,9 @@ static int msm_otg_remove(struct platform_device *pdev)
 		msm_otg_bus_vote(motg, USB_NO_PERF_VOTE);
 		msm_bus_scale_unregister_client(motg->bus_perf_client);
 	}
+#if defined(CONFIG_USB_HOST_NOTIFY)
+	host_notify_dev_unregister(&ndev);
+#endif
 
 	return 0;
 }

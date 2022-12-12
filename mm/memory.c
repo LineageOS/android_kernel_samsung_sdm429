@@ -73,6 +73,10 @@
 #include <asm/tlbflush.h>
 #include <asm/pgtable.h>
 
+#ifdef CONFIG_PAGE_BOOST_RECORDING
+#include <linux/io_record.h>
+#endif
+
 #include "internal.h"
 
 #define CREATE_TRACE_POINTS
@@ -3283,10 +3287,14 @@ int alloc_set_pte(struct fault_env *fe, struct mem_cgroup *memcg,
  * there is no much gain with fault_around.
  */
 static unsigned long fault_around_bytes __read_mostly =
+#ifdef CONFIG_FAULT_AROUND_4KB
+	rounddown_pow_of_two(4096);
+#else
 #ifndef __HAVE_ARCH_PTEP_SET_ACCESS_FLAGS
 	PAGE_SIZE;
 #else
 	rounddown_pow_of_two(65536);
+#endif
 #endif
 
 #ifdef CONFIG_DEBUG_FS
@@ -3424,6 +3432,10 @@ static int do_read_fault(struct fault_env *fe, pgoff_t pgoff)
 		ret = do_fault_around(fe, pgoff);
 		if (ret)
 			return ret;
+#ifdef CONFIG_PAGE_BOOST_RECORDING
+	} else if (vma->vm_ops->map_pages && fault_around_bytes >> PAGE_SHIFT == 1) {
+		record_io_info(vma->vm_file, pgoff, 1);
+#endif
 	}
 
 	ret = __do_fault(fe, pgoff, NULL, &fault_page, NULL);

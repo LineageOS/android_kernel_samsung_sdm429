@@ -139,6 +139,48 @@
 			};
 		};
 
+		afc {
+			afc_data_default: afc_data_default {
+				mux {
+					pins = "gpio44";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio44";
+					drive-strength = <16>;
+					bias-disable;
+				};	
+			};
+
+			afc_data_active: afc_data_active {
+				mux {
+					pins = "gpio44";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio44";
+					drive-strength = <16>;
+					bias-disable;
+				};	
+			};
+
+			afc_data_sleep: afc_data_sleep {
+				mux {
+					pins = "gpio44";
+					function = "gpio";
+				};
+
+				config {
+					pins = "gpio44";
+					bias-disable;
+					input-enable;
+					drive-strength = <16>;
+				};
+			};
+		};
+
 		/*sensors */
 		cam_sensor_mclk0_default: cam_sensor_mclk0_default {
 			/* MCLK0 */
@@ -154,7 +196,7 @@
 				drive-strength = <2>; /* 2 MA */
 			};
 		};
-
+		//+bug 600732,huangguoyong.wt, add,2020/11/16,86118 project camera hardware code for bring up(camera chromatix distinction)
 		cam_sensor_mclk0_sleep: cam_sensor_mclk0_sleep {
 			/* MCLK0 */
 			mux {
@@ -173,12 +215,12 @@
 		cam_sensor_rear_default: cam_sensor_rear_default {
 			/* RESET, STANDBY */
 			mux {
-				pins = "gpio40", "gpio39";
+				pins = "gpio40", "gpio130";
 				function = "gpio";
 			};
 
 			config {
-				pins = "gpio40","gpio39";
+				pins = "gpio40","gpio130";
 				bias-disable; /* No PULL */
 				drive-strength = <2>; /* 2 MA */
 			};
@@ -187,12 +229,12 @@
 		cam_sensor_rear_sleep: cam_sensor_rear_sleep {
 			/* RESET, STANDBY */
 			mux {
-				pins = "gpio40","gpio39";
+				pins = "gpio40","gpio130";
 				function = "gpio";
 			};
 
 			config {
-				pins = "gpio40","gpio39";
+				pins = "gpio40","gpio130";
 				bias-disable; /* No PULL */
 				drive-strength = <2>; /* 2 MA */
 			};
@@ -201,12 +243,12 @@
 		cam_sensor_ir_cut_default: cam_sensor_ir_cut_default {
 			/* RESET, STANDBY */
 			mux {
-				pins = "gpio38", "gpio39";
+				pins = "gpio39";
 				function = "gpio";
 			};
 
 			config {
-				pins = "gpio38","gpio39";
+				pins = "gpio39";
 				bias-pull-up; /* No PULL */
 				drive-strength = <2>; /* 2 MA */
 			};
@@ -215,12 +257,12 @@
 		cam_sensor_ir_cut_sleep: cam_sensor_ir_cut_sleep {
 			/* RESET, STANDBY */
 			mux {
-				pins = "gpio38","gpio39";
+				pins = "gpio39";
 				function = "gpio";
 			};
 
 			config {
-				pins = "gpio38","gpio39";
+				pins = "gpio39";
 				bias-disable; /* No PULL */
 				drive-strength = <2>; /* 2 MA */
 			};
@@ -287,6 +329,89 @@
 		cam_sensor_front_default: cam_sensor_front_default {
 			/* RESET, STANDBY */
 			mux {
+				pins = "gpio129";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio129";
+				bias-disable; /* No PULL */
+				drive-strength = <2>; /* 2 MA */
+			};
+		};
+
+		cam_sensor_front_sleep: cam_sensor_front_sleep {
+			/* RESET, STANDBY */
+			mux {
+				pins = "gpio129";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio129";
+				bias-disable; /* No PULL */
+				drive-strength = <2>; /* 2 MA */
+			};
+		};
+
+		cam_sensor_wide_default: cam_sensor_wide_default {
+			/* RESET, STANDBY */
+			mux {
+				pins = "gpio93";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio93";
+				bias-disable; /* No PULL */
+				drive-strength = <2>; /* 2 MA */
+			};
+		};
+
+		cam_sensor_wide_sleep: cam_sensor_wide_sleep {
+			/* RESET, STANDBY */
+			mux {
+				pins = "gpio93";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio93";
+				bias-disable; /* No PULL */
+				drive-strength = <2>; /* 2 MA */
+			};
+		};
+
+
+		cam_sensor_wide_mipi_en_default: cam_sensor_wide_mipi_en_default {
+			mux {
+				pins = "gpio36";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio36";
+				bias-disable; /* No PULL */
+				drive-strength = <2>; /* 2 MA */
+			};
+		};
+
+		cam_sensor_wide_mipi_en_sleep: cam_sensor_wide_mipi_en_sleep {
+			mux {
+				pins = "gpio36";
+				function = "gpio";
+			};
+
+			config {
+				pins = "gpio36";
+				bias-disable; /* No PULL */
+				drive-strength = <2>; /* 2 MA */
+			};
+		};
+
+		cam_sensor_depth_default: cam_sensor_depth_default {
+			/* RESET, STANDBY */
+			mux {
 				pins = "gpio131","gpio132";
 				function = "gpio";
 			};
@@ -298,7 +423,7 @@
 			};
 		};
 
-		cam_sensor_front_sleep: cam_sensor_front_sleep {
+		cam_sensor_depth_sleep: cam_sensor_depth_sleep {
 			/* RESET, STANDBY */
 			mux {
 				pins = "gpio131","gpio132";
@@ -323,7 +448,7 @@
 			config {
 				pins = "gpio28";
 				bias-disable; /* No PULL */
-				drive-strength = <2>; /* 2 MA */
+				drive-strength = <4>; /* 2 MA */
 			};
 		};
 
@@ -338,10 +463,40 @@
 			config {
 				pins = "gpio28";
 				bias-pull-down; /* PULL DOWN */
-				drive-strength = <2>; /* 2 MA */
+				drive-strength = <4>; /* 2 MA */
 			};
 		};
 
+		cam_sensor_mclk3_default: cam_sensor_mclk3_default {
+			/* MCLK2 */
+			mux {
+				/* CLK, DATA */
+				pins = "gpio128";
+				function = "cam_mclk";
+			};
+
+			config {
+				pins = "gpio128";
+				bias-disable; /* No PULL */
+				drive-strength = <4>; /* 2 MA */
+			};
+		};
+
+		cam_sensor_mclk3_sleep: cam_sensor_mclk3_sleep {
+			/* MCLK2 */
+			mux {
+				/* CLK, DATA */
+				pins = "gpio128";
+				function = "cam_mclk";
+			};
+
+			config {
+				pins = "gpio128";
+				bias-pull-down; /* PULL DOWN */
+				drive-strength = <4>; /* 2 MA */
+			};
+		};
+		//-bug 600732,huangguoyong.wt, add,2020/11/16,86118 project camera hardware code for bring up(camera chromatix distinction)
 		cam_sensor_front1_default: cam_sensor_front1_default {
 			/* RESET, STANDBY */
 			mux {
@@ -402,12 +557,14 @@
 		pmx_mdss: pmx_mdss {
 			mdss_dsi_active: mdss_dsi_active {
 				mux {
-					pins = "gpio61", "gpio59";
+					//chk 40240 wangcong.wt, delete, 2020/11/30, delete useless gpio
+					pins = "gpio61";
 					function = "gpio";
 				};
 
 				config {
-					pins = "gpio61", "gpio59";
+					//chk 40240 wangcong.wt, delete, 2020/11/30, delete useless gpio
+					pins = "gpio61";
 					drive-strength = <8>; /* 8 mA */
 					bias-disable = <0>; /* no pull */
 					output-high;
@@ -416,27 +573,16 @@
 
 			mdss_dsi_suspend: mdss_dsi_suspend {
 				mux {
-					pins = "gpio61", "gpio59";
+					//chk 40240 wangcong.wt, delete, 2020/11/30, delete useless gpio
+					pins = "gpio61";
 					function = "gpio";
 				};
 
 				config {
-					pins = "gpio61", "gpio59";
+					//chk 40240 wangcong.wt, delete, 2020/11/30, delete useless gpio
+					pins = "gpio61";
 					drive-strength = <2>; /* 2 mA */
 					bias-pull-down; /* pull down */
-				};
-			};
-			mdss_dsi_gpio: mdss_dsi_gpio {
-				mux {
-					pins = "gpio141";
-					function = "gpio";
-				};
-
-				config {
-					pins = "gpio141";
-					drive-strength = <8>;
-					bias-pull-down;
-					output-low;
 				};
 			};
 		};
@@ -817,6 +963,48 @@
 				};
 			};
 		};
+		fpc_reset_int {
+			fpc_reset_low: reset_low {
+				mux {
+					pins = "gpio140";
+					function = "fpc_reset_gpio_low";
+				};
+
+				config {
+					pins = "gpio140";
+					drive-strength = <2>;
+					bias-disable;
+					output-low;
+				};
+			};
+
+		fpc_reset_high: reset_high {
+				mux {
+					pins = "gpio140";
+					function = "fpc_reset_gpio_high";
+				};
+
+				config {
+					pins = "gpio140";
+					drive-strength = <2>;
+					bias-disable;
+					output-high;
+				};
+			};
+
+		fpc_int_low: int_low {
+				mux {
+					pins = "gpio48";
+				};
+				config {
+					pins = "gpio48";
+					drive-strength = <2>;
+					bias-pull-down;
+					input-enable;
+				};
+			};
+		};
+
 
 		i2c_2 {
 			i2c_2_active: i2c_2_active {
@@ -907,7 +1095,57 @@
 				};
 			};
 		};
+		//+bug600729,zhouweijie.wt,add,20201120,Q->R audio bring up
+		i2c_8 {
+				/* active state */
+				i2c_8_active: i2c_8_active{
+					mux {
+						/* CLK, DATA */
+						pins = "gpio98", "gpio99";
+						function = "blsp_i2c8";
+					};
+	
+					config {
+						pins = "gpio98", "gpio99";
+						drive-strength = <2>; /* 2 MA */
+						bias-disable; /* No PULL */
+					};
+				};
+	
+				/* suspended state */
+				i2c_8_sleep: i2c_8_sleep {
+					mux {
+						/* CLK, DATA */
+						pins = "gpio98", "gpio99";
+						function = "blsp_i2c8";
+					};
+	
+					config {
+						pins = "gpio98", "gpio99";
+						drive-strength = <2>; /* 2 MA */
+						bias-disable; /* No PULL */
+					};
+				};
+                       };
+/*+bug603256 xieyu.wt,20201124,add,open sar sensor for sda450*/
+		abov_int_pin {
+			abov_int_default: abov_int_default {
+			/* active state */
+			mux {
+				/* GPIO 45 sar Read Interrupt */
+				pins = "gpio38";
+				function = "gpio";
+			};
+		//-bug600729,zhouweijie.wt,add,20201120,Q->R audio bring up
 
+			config {
+				pins = "gpio38";
+				drive-strength = <2>; /* 2 MA */
+				bias-pull-up;
+			};
+		    };
+		};
+/*-bug603256 xieyu.wt,20201124,add,open sar sensor for sda450*/
 		nfc {
 			nfc_int_active: nfc_int_active {
 				/* active state */
@@ -1314,33 +1552,34 @@
 				};
 			};
 		};
-
+		//+bug 600732,huangguoyong.wt, add,2020/11/16,86118 project camera hardware code for bring up(camera chromatix distinction)
 		pri-tlmm-lines {
 			pri_tlmm_lines_act: pri_tlmm_lines_act {
 				mux {
-					pins = "gpio91", "gpio93";
+					pins = "gpio91", "gpio91";
 					function = "pri_mi2s";
 				};
 
 				config {
-					pins = "gpio91", "gpio93";
+					pins = "gpio91", "gpio91";
 					drive-strength = <8>;
 				};
 			};
 
 			pri_tlmm_lines_sus: pri_tlmm_lines_sus {
 				mux {
-					pins = "gpio91", "gpio93";
+					pins = "gpio91", "gpio91";
 					function = "pri_mi2s";
 				};
 
 				config {
-					pins = "gpio91", "gpio93";
+					pins = "gpio91", "gpio91";
 					drive-strength = <2>;
 					bias-pull-down;
 				};
 			};
 		};
+		//-bug 600732,huangguoyong.wt, add,2020/11/16,86118 project camera hardware code for bring up(camera chromatix distinction)
 
 		pri-tlmm-ws-lines {
 			pri_tlmm_ws_act: pri_tlmm_ws_act {
@@ -1410,6 +1649,7 @@
 				config {
 					pins = "gpio10";
 					drive-strength = <2>;
+                                        output-high;
 					bias-disable = <0>;
 				};
 			};
@@ -1424,6 +1664,7 @@
 				config {
 					pins = "gpio10";
 					drive-strength = <2>;
+                                        output-high;
 					bias-disable = <0>;
 				};
 			};
@@ -1612,7 +1853,7 @@
 				config {
 					pins = "gpio65";
 					drive-strength = <2>;
-					bias-pull-down;
+					bias-pull-up;
 				};
 			};
 		};

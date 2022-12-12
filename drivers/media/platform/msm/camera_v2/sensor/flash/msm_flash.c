@@ -56,6 +56,16 @@ static struct msm_camera_i2c_fn_t msm_sensor_cci_func_tbl = {
 	.i2c_poll =  msm_camera_cci_i2c_poll,
 };
 
+//++bug 600732,jiaozhibin.wt,modify,2020/12/21,86117 project for add flash node
+#define SS_FLASH_LEVEL
+#ifdef SS_FLASH_LEVEL
+static struct device_attribute dev_attr_rear_flash;
+struct class *level_class;
+struct msm_flash_ctrl_t *my_flash_ctrl = NULL;
+static int32_t flash_level = 0;
+#endif
+//--bug 600732,jiaozhibin.wt,modify,2020/12/21,86117 project for add flash node
+
 static void msm_torch_brightness_set(struct led_classdev *led_cdev,
 				enum led_brightness value)
 {
@@ -413,7 +423,7 @@ static int32_t msm_flash_off(struct msm_flash_ctrl_t *flash_ctrl,
 {
 	int32_t i = 0;
 
-	CDBG("Enter\n");
+	printk("wingtech msm_flash_off Enter\n");//++bug 600732,jiaozhibin.wt,modify,2020/12/21,86117 project for add flash node
 
 	for (i = 0; i < flash_ctrl->flash_num_sources; i++)
 		if (flash_ctrl->flash_trigger[i])
@@ -424,6 +434,12 @@ static int32_t msm_flash_off(struct msm_flash_ctrl_t *flash_ctrl,
 			led_trigger_event(flash_ctrl->torch_trigger[i], 0);
 	if (flash_ctrl->switch_trigger)
 		led_trigger_event(flash_ctrl->switch_trigger, 0);
+
+//++bug 600732,jiaozhibin.wt,modify,2020/12/21,86117 project for add flash node
+#ifdef SS_FLASH_LEVEL
+        flash_level = 0;
+#endif
+//--bug 600732,jiaozhibin.wt,modify,2020/12/21,86117 project for add flash node
 
 	CDBG("Exit\n");
 	return 0;
@@ -1265,6 +1281,101 @@ static long msm_flash_subdev_fops_ioctl(struct file *file,
 	return video_usercopy(file, cmd, arg, msm_flash_subdev_do_ioctl);
 }
 #endif
+
+//++bug 600732,jiaozhibin.wt,modify,2020/12/21,86117 project for add flash node
+#ifdef SS_FLASH_LEVEL
+static int32_t msm_flash_level(
+	struct msm_flash_ctrl_t *flash_ctrl,
+	uint32_t flash_data)
+{
+	int32_t i = 0;
+
+	/* Turn on flash triggers */
+	for (i = 0; i < flash_ctrl->torch_num_sources; i++) {
+		if (flash_ctrl->torch_trigger[i]) {
+			led_trigger_event(flash_ctrl->torch_trigger[i],
+				flash_data);
+		}
+	}
+	if (flash_ctrl->switch_trigger)
+		led_trigger_event(flash_ctrl->switch_trigger, 1);
+	CDBG("Exit\n");
+	return 0;
+}
+
+
+static ssize_t show_rear_flash(struct device *dev, struct device_attribute *attr, char *buf)
+{
+        printk("wingtech show_rear_flash");
+        return snprintf(buf, PAGE_SIZE, "%d\n",flash_level);
+}
+static ssize_t store_rear_flash(struct device *dev, struct device_attribute *attr, const char *buf, size_t cont)
+{
+	int32_t temp = 0;
+	char *pvalue=NULL;
+	temp = simple_strtol(buf, &pvalue, 0);
+	printk("wingtech store_rear_flash : %d", temp);
+	if(temp == flash_level){
+		printk("wingtech same brightness level");
+		return cont;
+	}
+	else if((temp == 1001) || (temp  == 1)){
+		msm_flash_level(my_flash_ctrl, 12);
+		printk("wingtech 12");
+	}
+	else if((temp == 1002) || (temp  == 2)){
+		msm_flash_level(my_flash_ctrl, 25);
+		printk("wingtech 25");
+	}
+	else if((temp == 1003) || (temp == 3)){
+		msm_flash_level(my_flash_ctrl, 35);
+		printk("wingtech 35");
+	}
+	else if((temp == 1005) || (temp == 5)){
+		msm_flash_level(my_flash_ctrl, 50);
+		printk("wingtech 50");
+	}
+	else if((temp == 1007) || (temp == 7)){
+		msm_flash_level(my_flash_ctrl, 65);
+		printk("wingtech 65");
+	}
+	else {
+		msm_flash_off(my_flash_ctrl, 0);
+		printk("wingtech off");
+	}
+	flash_level = temp;
+	return cont;
+}
+
+static DEVICE_ATTR(rear_flash, 0664, show_rear_flash, store_rear_flash);
+
+int samsung_flash_level_node_create(void)
+{
+        int32_t rc = 0;
+        struct device *level_device;
+
+        level_class = class_create(THIS_MODULE, "camera");
+                pr_err("kzalloc for tp_gesture_device failed!\n");
+        level_device = kzalloc(sizeof(struct device), GFP_KERNEL);
+
+        if (!level_device) {
+                pr_err("kzalloc for tp_gesture_device failed!\n");
+        }
+
+        level_device = device_create(level_class, NULL, 0, NULL, "flash");
+        if (rc){
+                pr_err("device_register for tp_gesture failed!\n");
+        }
+        rc = device_create_file(level_device, &dev_attr_rear_flash);
+        if (rc < 0){
+                pr_err("failed: dual camera sys");
+                kfree(level_device);//bug 621311,jiaozhibin.wt,add,2021/01/19,86117 project for fix resource leak
+        }
+        return rc;
+}
+#endif
+//--bug 600732,jiaozhibin.wt,modify,2020/12/21,86117 project for add flash node
+
 static int32_t msm_flash_platform_probe(struct platform_device *pdev)
 {
 	int32_t rc = 0;
@@ -1337,6 +1448,13 @@ static int32_t msm_flash_platform_probe(struct platform_device *pdev)
 
 	if (flash_ctrl->flash_driver_type == FLASH_DRIVER_PMIC)
 		rc = msm_torch_create_classdev(pdev, flash_ctrl);
+
+//+ExtB P200121-02469 [camera-BSP][feature],yinjie.wt add 2020/02/20 for flash level
+#ifdef SS_FLASH_LEVEL
+        samsung_flash_level_node_create();
+        my_flash_ctrl = flash_ctrl;
+#endif
+//-ExtB P200121-02469 [camera-BSP][feature],yinjie.wt add 2020/02/20 for flash level
 
 	CDBG("probe success\n");
 	return rc;

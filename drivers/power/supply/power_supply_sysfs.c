@@ -47,14 +47,19 @@ static ssize_t power_supply_show_property(struct device *dev,
 		"Unknown", "Battery", "UPS", "Mains", "USB", "USB_DCP",
 		"USB_CDP", "USB_ACA", "USB_HVDCP", "USB_HVDCP_3", "USB_PD",
 		"Wireless", "USB_FLOAT", "BMS", "Parallel", "Main", "Wipower",
-		"TYPEC", "TYPEC_UFP", "TYPEC_DFP"
+		//Bug 600732,xushengjuan.wt,modify,20201118,S86117,add otg node
+		"TYPEC", "TYPEC_UFP", "TYPEC_DFP", "OTG",
+#if defined(CONFIG_AFC)
+		"AFC",
+#endif
 	};
 	static char *status_text[] = {
 		"Unknown", "Charging", "Discharging", "Not charging", "Full"
 	};
 	static char *charge_type[] = {
 		"Unknown", "N/A", "Trickle", "Fast",
-		"Taper"
+		//Bug 600732,xushengjuan.wt,modify,20201118,S86117,new_charge_type node
+		"Taper", "Slow"
 	};
 	static char *health_text[] = {
 		"Unknown", "Good", "Overheat", "Dead", "Over voltage",
@@ -108,7 +113,8 @@ static ssize_t power_supply_show_property(struct device *dev,
 	if (off == POWER_SUPPLY_PROP_STATUS)
 		return scnprintf(buf, PAGE_SIZE, "%s\n",
 				status_text[value.intval]);
-	else if (off == POWER_SUPPLY_PROP_CHARGE_TYPE)
+	//Bug 600732,xushengjuan.wt,modify,20201118,S86117,add new_charge_type node
+	else if (off == POWER_SUPPLY_PROP_CHARGE_TYPE || off == POWER_SUPPLY_PROP_NEW_CHARGE_TYPE)
 		return scnprintf(buf, PAGE_SIZE, "%s\n",
 				charge_type[value.intval]);
 	else if (off == POWER_SUPPLY_PROP_HEALTH)
@@ -160,13 +166,24 @@ static ssize_t power_supply_store_property(struct device *dev,
 	union power_supply_propval value;
 	long long_val;
 
+	//+Bug 600732,xushengjuan.wt,modify,20201118,S86117,store_mode argus update
+	int x;
+	if(off == POWER_SUPPLY_PROP_STORE_MODE)
+	{
+		if(sscanf(buf,"%10d\n",&x)==1){
+			value.intval = x;
+			pr_err("WT buf %s, store_mode %d, \n",buf, x);
+		}
+	} else {
+
 	/* TODO: support other types than int */
 	ret = kstrtol(buf, 10, &long_val);
 	if (ret < 0)
 		return ret;
 
 	value.intval = long_val;
-
+	}
+	//-Bug 600732,xushengjuan.wt,modify,20201118,S86117,store_mode argus update
 	ret = power_supply_set_property(psy, off, &value);
 	if (ret < 0)
 		return ret;
@@ -341,6 +358,32 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(soh),
 	POWER_SUPPLY_ATTR(qc_opti_disable),
 	POWER_SUPPLY_ATTR(fcc_stepper_enable),
+	//+Bug601084, yangpingao.wt, modify, 2020/11/17, P81081 charger bring up, Stopchg/Startchg
+	POWER_SUPPLY_ATTR(StopCharging_Test),
+	POWER_SUPPLY_ATTR(StartCharging_Test),
+	//-Bug601084, yangpingao.wt, modify, 2020/11/17, P81081 charger bring up, Stopchg/Startchg
+	//+Bug 600732,xushengjuan.wt,modify,20201118,S86117,add nodes
+	//Bug 437318 caijiaqi.wt, ADD,20190409,P81081 add store_mode node to control capacity
+	POWER_SUPPLY_ATTR(store_mode),
+	//+Bug 437373 caijiaqi.wt, ADD,20190409,P81081 add battery node for customer
+	POWER_SUPPLY_ATTR(hv_charger_status),
+	POWER_SUPPLY_ATTR(batt_current_event),
+	POWER_SUPPLY_ATTR(batt_slate_mode),
+	//Bug 439628 caijiaqi.wt,MODIFIY,20190423,modifiy node name batt_mise_event to batt_misc_event
+	POWER_SUPPLY_ATTR(batt_misc_event),
+	//-Bug 437373 caijiaqi.wt, ADD,20190409,P81081 add battery node for customer
+	//Bug 437837 caijiaqi.wt,MODIFIY,20190411,P81081 add new_charge_type node
+	POWER_SUPPLY_ATTR(new_charge_type),
+	//Bug 437997 caijiaqi.wt,MODIFIY,20190412,P81081 add batt_current_ua_now node
+	POWER_SUPPLY_ATTR(batt_current_ua_now),
+	//-Bug 600732,xushengjuan.wt,modify,20201118,S86117,add nodes
+	//+ SS_charging, add battery_cycle node
+	POWER_SUPPLY_ATTR(battery_cycle),
+	//- SS_charging, add battery_cycle node
+#if defined(CONFIG_AFC)
+	POWER_SUPPLY_ATTR(afc_result),
+	POWER_SUPPLY_ATTR(hv_disable),
+#endif
 	POWER_SUPPLY_ATTR(cc_soc),
 	POWER_SUPPLY_ATTR(qg_vbms_mode),
 	POWER_SUPPLY_ATTR(real_capacity),
@@ -444,6 +487,12 @@ int power_supply_uevent(struct device *dev, struct kobj_uevent_env *env)
 	for (j = 0; j < psy->desc->num_properties; j++) {
 		struct device_attribute *attr;
 		char *line;
+
+		//+Bug601084, yangpingao.wt, modify, 2020/11/17, P81081 charger bring up, Stopchg/Startchg
+		if ((psy->desc->properties[j] == POWER_SUPPLY_PROP_STOPCHARGING_TEST)
+			|| (psy->desc->properties[j] == POWER_SUPPLY_PROP_STARTCHARGING_TEST))
+			continue;
+		//-Bug601084, yangpingao.wt, modify, 2020/11/17, P81081 charger bring up, Stopchg/Startchg
 
 		attr = &power_supply_attrs[psy->desc->properties[j]];
 

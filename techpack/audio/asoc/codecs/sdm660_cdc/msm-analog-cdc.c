@@ -32,6 +32,11 @@
 #include "sdm660-cdc-irq.h"
 #include "msm-analog-cdc-regmap.h"
 #include "../wcd-mbhc-v2-api.h"
+/* +Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
+#ifdef CONFIG_SND_SOC_AW87319
+#include "../../aw87319_audio.h"
+#endif
+/* -Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
 
 #define DRV_NAME "pmic_analog_codec"
 #define SDM660_CDC_RATES (SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |\
@@ -57,8 +62,13 @@
 #define EAR_PMU 1
 #define SPK_PMD 2
 #define SPK_PMU 3
-
+#ifdef CONFIG_ARCH_MSM8953
+#define MICBIAS_DEFAULT_VAL 2400000
+#elif defined CONFIG_ARCH_MSM8937
+#define MICBIAS_DEFAULT_VAL 2400000
+#else
 #define MICBIAS_DEFAULT_VAL 1800000
+#endif
 #define MICBIAS_MIN_VAL 1600000
 #define MICBIAS_STEP_SIZE 50000
 
@@ -92,7 +102,13 @@ static char on_demand_supply_name[][MAX_ON_DEMAND_SUPPLY_NAME_LENGTH] = {
 	"cdc-vdda18-l10",
 	"cdc-vdd-l1",
 };
-
+//+bug600729,zhouweijie.wt,add,20201120,Q->R audio bring up
+#ifdef CONFIG_ARCH_MSM8953
+extern unsigned char aw87329_audio_kspk(void);
+extern unsigned char aw87329_audio_drcv(void);
+extern unsigned char aw87329_audio_off(void);
+#endif
+//-bug600729,zhouweijie.wt,add,20201120,Q->R audio bring up
 static struct wcd_mbhc_register
 	wcd_mbhc_registers[WCD_MBHC_REG_FUNC_MAX] = {
 	WCD_MBHC_REGISTER("WCD_MBHC_L_DET_EN",
@@ -2024,6 +2040,34 @@ static const char * const ext_spk_text[] = {
 	"Off", "On"
 };
 
+//+bug600729,zhouweijie.wt,add,20201120,Q->R audio bring up
+#ifdef CONFIG_ARCH_MSM8953
+static const char * const ext_n9aw_spk_text[] = {
+	"Off", "On"
+};
+#endif
+//-bug600729,zhouweijie.wt,add,20201120,Q->R audio bring up
+
+/* +Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
+#ifdef CONFIG_SND_SOC_AW87319
+static const char * const ext_left_spk_text[] = {
+    "Off", "On"
+};
+
+static const char * const ext_right_spk_text[] = {
+    "Off", "On"
+};
+
+static const char * const ext_left_vspk_text[] = {
+    "Off", "On"
+};
+
+static const char * const ext_right_vspk_text[] = {
+    "Off", "On"
+};
+#endif
+/* -Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
+
 static const char * const wsa_spk_text[] = {
 	"ZERO", "WSA"
 };
@@ -2036,6 +2080,35 @@ static const struct soc_enum ext_spk_enum =
 	SOC_ENUM_SINGLE(SND_SOC_NOPM, 0,
 		ARRAY_SIZE(ext_spk_text), ext_spk_text);
 
+
+//+bug600729,zhouweijie.wt,add,20201120,Q->R audio bring up
+#ifdef CONFIG_ARCH_MSM8953
+static const struct soc_enum ext_n9aw_spk_enum =
+	SOC_ENUM_SINGLE(SND_SOC_NOPM, 0,
+		ARRAY_SIZE(ext_n9aw_spk_text), ext_n9aw_spk_text);
+
+#endif
+//-bug600729,zhouweijie.wt,add,20201120,Q->R audio bring up
+/* +Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
+#ifdef CONFIG_SND_SOC_AW87319
+static const struct soc_enum ext_left_spk_enum =
+    SOC_ENUM_SINGLE(SND_SOC_NOPM, 0,
+        ARRAY_SIZE(ext_left_spk_text), ext_left_spk_text);
+
+static const struct soc_enum ext_right_spk_enum =
+    SOC_ENUM_SINGLE(SND_SOC_NOPM, 0,
+        ARRAY_SIZE(ext_right_spk_text), ext_right_spk_text);
+
+static const struct soc_enum ext_left_vspk_enum =
+    SOC_ENUM_SINGLE(SND_SOC_NOPM, 0,
+        ARRAY_SIZE(ext_left_vspk_text), ext_left_vspk_text);
+
+static const struct soc_enum ext_right_vspk_enum =
+    SOC_ENUM_SINGLE(SND_SOC_NOPM, 0,
+        ARRAY_SIZE(ext_right_vspk_text), ext_right_vspk_text);
+#endif
+/* -Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
+
 static const struct soc_enum wsa_spk_enum =
 	SOC_ENUM_SINGLE(SND_SOC_NOPM, 0,
 		ARRAY_SIZE(wsa_spk_text), wsa_spk_text);
@@ -2046,6 +2119,30 @@ static const struct snd_kcontrol_new ext_spk_mux =
 	SOC_DAPM_ENUM("Ext Spk Switch Mux", ext_spk_enum);
 
 
+
+//+bug600729,zhouweijie.wt,add,20201120,Q->R audio bring up
+#ifdef CONFIG_ARCH_MSM8953
+static const struct snd_kcontrol_new ext_n9aw_spk_mux =
+	SOC_DAPM_ENUM("Ext N9AW Spk Switch Mux", ext_n9aw_spk_enum);
+
+#endif
+//-bug600729,zhouweijie.wt,add,20201120,Q->R audio bring up
+
+/* +Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
+#ifdef CONFIG_SND_SOC_AW87319
+static const struct snd_kcontrol_new ext_left_spk_mux =
+    SOC_DAPM_ENUM("Ext Left Spk Switch Mux", ext_left_spk_enum);
+
+static const struct snd_kcontrol_new ext_right_spk_mux =
+    SOC_DAPM_ENUM("Ext Right Spk Switch Mux", ext_right_spk_enum);
+
+static const struct snd_kcontrol_new ext_left_vspk_mux =
+    SOC_DAPM_ENUM("Ext Left VSpk Switch Mux", ext_left_vspk_enum);
+
+static const struct snd_kcontrol_new ext_right_vspk_mux =
+    SOC_DAPM_ENUM("Ext Right VSpk Switch Mux", ext_right_vspk_enum);
+#endif
+/* -Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
 
 static const struct snd_kcontrol_new tx_adc2_mux =
 	SOC_DAPM_ENUM("ADC2 MUX Mux", adc2_enum);
@@ -3032,6 +3129,27 @@ static const struct snd_soc_dapm_route audio_map[] = {
 	{"Ext Spk Switch", "On", "HPHL PA"},
 	{"Ext Spk Switch", "On", "HPHR PA"},
 
+
+//+bug600729,zhouweijie.wt,add,20201120,Q->R audio bring up
+#ifdef CONFIG_ARCH_MSM8953
+	{"Ext N9AW Spk", NULL, "Ext N9AW Spk Switch"},
+	{"Ext N9AW Spk Switch", "On", "LINEOUT PA"},
+#endif
+//-bug600729,zhouweijie.wt,add,20201120,Q->R audio bring up
+/* +Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
+#ifdef CONFIG_SND_SOC_AW87319
+    {"Ext Left Spk", NULL, "Ext Left Spk Switch"},
+    {"Ext Right Spk", NULL, "Ext Right Spk Switch"},
+    {"Ext Left Spk Switch", "On", "HPHL PA"},
+    {"Ext Right Spk Switch", "On", "HPHR PA"},
+
+    {"Ext Left VSpk", NULL, "Ext Left VSpk Switch"},
+    {"Ext Right VSpk", NULL, "Ext Right VSpk Switch"},
+    {"Ext Left VSpk Switch", "On", "HPHL PA"},
+    {"Ext Right VSpk Switch", "On", "HPHR PA"},
+#endif
+/* -Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
+
 	{"HPHL PA", NULL, "HPHL"},
 	{"HPHR PA", NULL, "HPHR"},
 	{"HPHL", "Switch", "HPHL DAC"},
@@ -3286,6 +3404,124 @@ static int msm_anlg_cdc_codec_enable_spk_ext_pa(struct snd_soc_dapm_widget *w,
 	return 0;
 }
 
+//+bug600729,zhouweijie.wt,add,20201120,Q->R audio bring up
+#ifdef CONFIG_ARCH_MSM8953
+static int msm_anlg_cdc_codec_enable_n9aw_spk_ext_pa(struct snd_soc_dapm_widget *w,
+						struct snd_kcontrol *kcontrol,
+						int event)
+{
+	struct snd_soc_codec *codec = snd_soc_dapm_to_codec(w->dapm);
+
+	dev_err(codec->dev, "%s: %s n9aw event = %d\n", __func__, w->name, event);
+	switch (event) {
+	case SND_SOC_DAPM_POST_PMU:
+		dev_err(codec->dev,
+			"%s: enable n9aw speaker PA\n", __func__);
+		aw87329_audio_kspk();
+		break;
+	case SND_SOC_DAPM_PRE_PMD:
+		dev_err(codec->dev,
+			"%s: disable n9aw speaker PA\n", __func__);
+		aw87329_audio_off();
+		break;
+	}
+	return 0;
+}
+#endif
+//-bug600729,zhouweijie.wt,add,20201120,Q->R audio bring up
+
+/* +Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
+#ifdef CONFIG_SND_SOC_AW87319
+static int msm_anlg_cdc_codec_enable_left_spk_ext_pa(struct snd_soc_dapm_widget *w,
+                        struct snd_kcontrol *kcontrol,
+                        int event)
+{
+    struct snd_soc_codec *codec = snd_soc_dapm_to_codec(w->dapm);
+
+    dev_dbg(codec->dev, "%s: %s event = %d\n", __func__, w->name, event);
+    switch (event) {
+    case SND_SOC_DAPM_POST_PMU:
+        dev_dbg(codec->dev,
+            "%s: enable left speaker PA\n", __func__);
+        aw87319l_audio_speaker();
+        break;
+    case SND_SOC_DAPM_PRE_PMD:
+        dev_dbg(codec->dev,
+            "%s: disable left speaker PA\n", __func__);
+        aw87319l_audio_off();
+        break;
+    }
+    return 0;
+}
+
+static int msm_anlg_cdc_codec_enable_right_spk_ext_pa(struct snd_soc_dapm_widget *w,
+                        struct snd_kcontrol *kcontrol,
+                        int event)
+{
+    struct snd_soc_codec *codec = snd_soc_dapm_to_codec(w->dapm);
+
+    dev_dbg(codec->dev, "%s: %s event = %d\n", __func__, w->name, event);
+    switch (event) {
+    case SND_SOC_DAPM_POST_PMU:
+        dev_dbg(codec->dev,
+            "%s: enable right speaker PA\n", __func__);
+        aw87319r_audio_speaker();
+        break;
+    case SND_SOC_DAPM_PRE_PMD:
+        dev_dbg(codec->dev,
+            "%s: disable right speaker PA\n", __func__);
+        aw87319r_audio_off();
+        break;
+    }
+    return 0;
+}
+
+static int msm_anlg_cdc_codec_enable_left_vspk_ext_pa(struct snd_soc_dapm_widget *w,
+                        struct snd_kcontrol *kcontrol,
+                        int event)
+{
+    struct snd_soc_codec *codec = snd_soc_dapm_to_codec(w->dapm);
+
+    dev_dbg(codec->dev, "%s: %s event = %d\n", __func__, w->name, event);
+    switch (event) {
+    case SND_SOC_DAPM_POST_PMU:
+        dev_dbg(codec->dev,
+            "%s: enable left vspk PA\n", __func__);
+        aw87319l_audio_voice_speaker();
+        break;
+    case SND_SOC_DAPM_PRE_PMD:
+        dev_dbg(codec->dev,
+            "%s: disable left vspk PA\n", __func__);
+        aw87319l_audio_off();
+        break;
+    }
+    return 0;
+}
+
+static int msm_anlg_cdc_codec_enable_right_vspk_ext_pa(struct snd_soc_dapm_widget *w,
+                        struct snd_kcontrol *kcontrol,
+                        int event)
+{
+    struct snd_soc_codec *codec = snd_soc_dapm_to_codec(w->dapm);
+
+    dev_dbg(codec->dev, "%s: %s event = %d\n", __func__, w->name, event);
+    switch (event) {
+    case SND_SOC_DAPM_POST_PMU:
+        dev_dbg(codec->dev,
+            "%s: enable right vspk PA\n", __func__);
+        aw87319r_audio_voice_speaker();
+        break;
+    case SND_SOC_DAPM_PRE_PMD:
+        dev_dbg(codec->dev,
+            "%s: disable right vspk PA\n", __func__);
+        aw87319r_audio_off();
+        break;
+    }
+    return 0;
+}
+#endif
+/* -Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
+
 static int msm_anlg_cdc_codec_enable_ear_pa(struct snd_soc_dapm_widget *w,
 					    struct snd_kcontrol *kcontrol,
 					    int event)
@@ -3391,6 +3627,21 @@ static const struct snd_soc_dapm_widget msm_anlg_cdc_dapm_widgets[] = {
 	SND_SOC_DAPM_MUX("RDAC2 MUX", SND_SOC_NOPM, 0, 0, &rdac2_mux),
 	SND_SOC_DAPM_MUX("WSA Spk Switch", SND_SOC_NOPM, 0, 0, wsa_spk_mux),
 	SND_SOC_DAPM_MUX("Ext Spk Switch", SND_SOC_NOPM, 0, 0, &ext_spk_mux),
+
+//+bug600729,zhouweijie.wt,add,20201120,Q->R audio bring up
+#ifdef CONFIG_ARCH_MSM8953
+	SND_SOC_DAPM_MUX("Ext N9AW Spk Switch", SND_SOC_NOPM, 0, 0, &ext_n9aw_spk_mux),
+#endif
+//-bug600729,zhouweijie.wt,add,20201120,Q->R audio bring up
+/* +Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
+#ifdef CONFIG_SND_SOC_AW87319
+    SND_SOC_DAPM_MUX("Ext Left Spk Switch", SND_SOC_NOPM, 0, 0, &ext_left_spk_mux),
+    SND_SOC_DAPM_MUX("Ext Right Spk Switch", SND_SOC_NOPM, 0, 0, &ext_right_spk_mux),
+    SND_SOC_DAPM_MUX("Ext Left VSpk Switch", SND_SOC_NOPM, 0, 0, &ext_left_vspk_mux),
+    SND_SOC_DAPM_MUX("Ext Right VSpk Switch", SND_SOC_NOPM, 0, 0, &ext_right_vspk_mux),
+#endif
+/* -Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
+
 	SND_SOC_DAPM_MUX("LINE_OUT", SND_SOC_NOPM, 0, 0, lo_mux),
 	SND_SOC_DAPM_MUX("ADC2 MUX", SND_SOC_NOPM, 0, 0, &tx_adc2_mux),
 
@@ -3415,6 +3666,21 @@ static const struct snd_soc_dapm_widget msm_anlg_cdc_dapm_widgets[] = {
 		SND_SOC_DAPM_POST_PMD),
 
 	SND_SOC_DAPM_SPK("Ext Spk", msm_anlg_cdc_codec_enable_spk_ext_pa),
+
+//+bug600729,zhouweijie.wt,add,20201120,Q->R audio bring up
+#ifdef CONFIG_ARCH_MSM8953
+	SND_SOC_DAPM_SPK("Ext N9AW Spk", msm_anlg_cdc_codec_enable_n9aw_spk_ext_pa),
+#endif
+//-bug600729,zhouweijie.wt,add,20201120,Q->R audio bring up
+
+/* +Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
+#ifdef CONFIG_SND_SOC_AW87319
+    SND_SOC_DAPM_SPK("Ext Left Spk", msm_anlg_cdc_codec_enable_left_spk_ext_pa),
+    SND_SOC_DAPM_SPK("Ext Right Spk", msm_anlg_cdc_codec_enable_right_spk_ext_pa),
+    SND_SOC_DAPM_SPK("Ext Left VSpk", msm_anlg_cdc_codec_enable_left_vspk_ext_pa),
+    SND_SOC_DAPM_SPK("Ext Right VSpk", msm_anlg_cdc_codec_enable_right_vspk_ext_pa),
+#endif
+/* -Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
 
 	SND_SOC_DAPM_SWITCH("ADC1_INP1", SND_SOC_NOPM, 0, 0,
 			    &adc1_switch),
@@ -4200,6 +4466,21 @@ static int msm_anlg_cdc_soc_probe(struct snd_soc_codec *codec)
 
 	/* Set initial cap mode */
 	msm_anlg_cdc_configure_cap(codec, false, false);
+
+//+bug600729,zhouweijie.wt,add,20201120,Q->R audio bring up
+#ifdef CONFIG_ARCH_MSM8953
+	snd_soc_dapm_ignore_suspend(dapm, "Ext N9AW Spk");
+#endif
+//-bug600729,zhouweijie.wt,add,20201120,Q->R audio bring up
+
+/* +Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
+#ifdef CONFIG_SND_SOC_AW87319
+    snd_soc_dapm_ignore_suspend(dapm, "Ext Left Spk");
+    snd_soc_dapm_ignore_suspend(dapm, "Ext Right Spk");
+    snd_soc_dapm_ignore_suspend(dapm, "Ext Left VSpk");
+    snd_soc_dapm_ignore_suspend(dapm, "Ext Right VSpk");
+#endif
+/* -Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
 
 	snd_soc_dapm_ignore_suspend(dapm, "PDM Playback");
 	snd_soc_dapm_ignore_suspend(dapm, "PDM Capture");

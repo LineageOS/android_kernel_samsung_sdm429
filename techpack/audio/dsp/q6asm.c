@@ -54,6 +54,8 @@ enum {
 	ASM_MAX_CAL_TYPES
 };
 
+#define FRAME_NUM             (8)
+
 union asm_token_struct {
 	struct {
 		u8 stream_id;
@@ -1461,6 +1463,8 @@ int q6asm_audio_client_buf_alloc(unsigned int dir,
 			pr_debug("%s: buffer already allocated\n", __func__);
 			return 0;
 		}
+		if (bufcnt != FRAME_NUM)
+			goto fail;
 		mutex_lock(&ac->cmd_lock);
 		if (bufcnt > (U32_MAX/sizeof(struct audio_buffer))) {
 			pr_err("%s: Buffer size overflows", __func__);

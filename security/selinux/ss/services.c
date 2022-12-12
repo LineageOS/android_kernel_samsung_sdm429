@@ -747,6 +747,13 @@ out:
 	kfree(n);
 	kfree(t);
 
+// [ SEC_SELINUX_PORTING_COMMON
+#ifdef CONFIG_ALWAYS_ENFORCE
+#if !defined(CONFIG_RKP_KDP)
+	selinux_enforcing = 1;
+#endif
+#endif
+// ] SEC_SELINUX_PORTING_COMMON
 	if (!selinux_enforcing)
 		return 0;
 	return -EPERM;
@@ -1530,6 +1537,14 @@ out:
 	kfree(s);
 	kfree(t);
 	kfree(n);
+
+// [ SEC_SELINUX_PORTING_COMMON
+#ifdef CONFIG_ALWAYS_ENFORCE
+#if !defined(CONFIG_RKP_KDP)
+	selinux_enforcing = 1;
+#endif
+#endif
+// ] SEC_SELINUX_PORTING_COMMON
 	if (!selinux_enforcing)
 		return 0;
 	return -EACCES;
@@ -1821,6 +1836,13 @@ static inline int convert_context_handle_invalid_context(struct context *context
 	char *s;
 	u32 len;
 
+// [ SEC_SELINUX_PORTING_COMMON
+#ifdef CONFIG_ALWAYS_ENFORCE
+#if !defined(CONFIG_RKP_KDP)
+	selinux_enforcing = 1;
+#endif
+#endif
+// ] SEC_SELINUX_PORTING_COMMON
 	if (selinux_enforcing)
 		return -EINVAL;
 
@@ -2486,8 +2508,10 @@ static inline int __security_genfs_sid(const char *fstype,
 	}
 
 	rc = -ENOENT;
-	if (!genfs || cmp)
+	if (!genfs || cmp){
+		printk(KERN_ERR "SELinux: %s: genfs || cmp\n", __func__);
 		goto out;
+	}
 
 	for (c = genfs->head; c; c = c->next) {
 		len = strlen(c->u.name);
@@ -2497,13 +2521,17 @@ static inline int __security_genfs_sid(const char *fstype,
 	}
 
 	rc = -ENOENT;
-	if (!c)
+	if (!c) {
+		printk(KERN_ERR "SELinux: %s empty ocontext c \n", __func__);
 		goto out;
+	}
 
 	if (!c->sid[0]) {
 		rc = sidtab_context_to_sid(&sidtab, &c->context[0], &c->sid[0]);
-		if (rc)
+		if (rc) {
+			printk(KERN_ERR "SELinux: %s: sid\n", __func__);
 			goto out;
+	}
 	}
 
 	*sid = c->sid[0];
@@ -2543,6 +2571,7 @@ int security_fs_use(struct super_block *sb)
 {
 	int rc = 0;
 	struct ocontext *c;
+
 	struct superblock_security_struct *sbsec = sb->s_security;
 	const char *fstype = sb->s_type->name;
 

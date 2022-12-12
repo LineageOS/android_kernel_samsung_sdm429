@@ -52,6 +52,12 @@
 #include "sd_ops.h"
 #include "sdio_ops.h"
 
+#ifdef CONFIG_MMC_SUPPORT_STLOG
+#include <linux/fslog.h>
+#else
+#define ST_LOG(fmt,...)
+#endif
+
 /* If the device is not responding */
 #define MMC_CORE_TIMEOUT_MS	(10 * 60 * 1000) /* 10 minute timeout */
 
@@ -4443,6 +4449,8 @@ int _mmc_detect_card_removed(struct mmc_host *host)
 	if (ret) {
 		if (host->ops->get_cd && host->ops->get_cd(host)) {
 			ret = mmc_recovery_fallback_lower_speed(host);
+			ST_LOG("<%s> %s: card remove detected\n",
+					__func__, mmc_hostname(host));
 		} else {
 			mmc_card_set_removed(host->card);
 			if (host->card->sdr104_blocked) {
@@ -4451,6 +4459,8 @@ int _mmc_detect_card_removed(struct mmc_host *host)
 			}
 			pr_debug("%s: card remove detected\n",
 					mmc_hostname(host));
+			ST_LOG("<%s> %s: card remove detected\n",
+					__func__, mmc_hostname(host));
 		}
 	}
 
@@ -4571,6 +4581,7 @@ void mmc_rescan(struct work_struct *work)
 		mmc_release_host(host);
 		goto out;
 	}
+
 	mmc_rescan_try_freq(host, host->f_min);
 	host->err_stats[MMC_ERR_CMD_TIMEOUT] = 0;
 	mmc_release_host(host);

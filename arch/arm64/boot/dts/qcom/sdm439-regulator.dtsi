@@ -155,17 +155,17 @@
 			status = "okay";
 		};
 	};
-
+	//++bug 601075, huangguoyong.wt, modify,2020/11/17,modify for p81081 bringup camera
 	rpm-regulator-ldoa3 {
 		status = "okay";
 		pm8953_l3: regulator-l3 {
-			regulator-min-microvolt = <1140000>;
-			regulator-max-microvolt = <1200000>;
-			qcom,init-voltage = <1140000>;
+			regulator-min-microvolt = <1250000>;
+			regulator-max-microvolt = <1250000>;
+			qcom,init-voltage = <1250000>;
 			status = "okay";
 		};
 	};
-
+	//--bug 601075, huangguoyong.wt, modify,2020/11/17,modify for p81081 bringup camera
 	rpm-regulator-ldoa4 {
 		compatible = "qcom,rpm-smd-regulator-resource";
 		qcom,resource-name = "ldoa";
@@ -190,6 +190,7 @@
 			regulator-min-microvolt = <1800000>;
 			regulator-max-microvolt = <1800000>;
 			qcom,init-voltage = <1800000>;
+                        regulator-always-on; //+bug601075,sheqihao.wt, modify, 2020.11.13, N8-R Project tp Bringup
 			status = "okay";
 		};
 	};
@@ -200,6 +201,7 @@
 			regulator-min-microvolt = <1800000>;
 			regulator-max-microvolt = <1800000>;
 			qcom,init-voltage = <1800000>;
+			regulator-always-on; //+bug601075,sheqihao.wt, modify, 2020.11.13, N8-R Project tp Bringup
 			status = "okay";
 		};
 	};
@@ -246,9 +248,10 @@
 	rpm-regulator-ldoa10 {
 		status = "okay";
 		pm8953_l10: regulator-l10 {
-			regulator-min-microvolt = <2948000>;
+			regulator-min-microvolt = <3300000>;//+bug601075,sheqihao.wt, modify, 2020.11.13, N8-R Project Display Bringup
 			regulator-max-microvolt = <3300000>;
-			qcom,init-voltage = <2948000>;
+			qcom,init-voltage = <3300000>;//+bug601075,sheqihao.wt, modify, 2020.11.13, N8-R Project Display Bringup
+                        regulator-always-on; //+bug601075,sheqihao.wt, modify, 2020.11.13, N8-R Project Display Bringup
 			status = "okay";
 		};
 	};
@@ -348,17 +351,17 @@
 			status = "okay";
 		};
 	};
-
+	//++bug 601075, huangguoyong.wt, modify,2020/11/17,modify for p81081 bringup camera
 	rpm-regulator-ldoa22 {
 		status = "okay";
 		pm8953_l22: regulator-l22 {
-			regulator-min-microvolt = <2560000>;
-			regulator-max-microvolt = <2840000>;
-			qcom,init-voltage = <2560000>;
+			regulator-min-microvolt = <2920000>;
+			regulator-max-microvolt = <2920000>;
+			qcom,init-voltage = <2920000>;
 			status = "okay";
 		};
 	};
-
+	//--bug 601075, huangguoyong.wt, modify,2020/11/17,modify for p81081 bringup camera
 	rpm-regulator-ldoa23 {
 		status = "okay";
 		pm8953_l23: regulator-l23 {

@@ -65,8 +65,7 @@
 #define DEFAULT_DATA_OFFSET 2
 #define DEFAULT_DATA_SIZE 249
 /* Power levels are 0-7, but SOC will expect values from 0-255
- * So the each level step size will be 255/7 = 36
- */
+ * So the each level step size will be 255/7 = 36 */
 #define FM_TX_PWR_LVL_STEP_SIZE 36
 #define FM_TX_PWR_LVL_0         0 /* Lowest power lvl that can be set for Tx */
 #define FM_TX_PWR_LVL_MAX       7 /* Max power lvl for Tx */
@@ -101,13 +100,17 @@
 #define ENTRIES_EACH_CMD 15
 #define SPUR_DATA_INDEX 2
 #define FM_AF_LIST_MAX_SIZE   200
-/* Each AF frequency consist of sizeof(int) bytes */
-#define AF_LIST_MAX     (FM_AF_LIST_MAX_SIZE / 4)
-
+#define AF_LIST_MAX     (FM_AF_LIST_MAX_SIZE / 4) /* Each AF frequency consist
+							of sizeof(int) bytes */
 #define MAX_BLEND_INDEX 49
 
 #define TUNE_PARAM 16
 #define FM_RDS_3A_GRP (0x40)
+#define AF_JMP_TUNE 0x03
+#define DIG_AUDIO_0_MODE	0x2B
+#define DIG_AUDIO_0_LEN		0x10
+#define SMUTE_TH_OFFSET		2
+#define MAX_SOFTMUTE_TH		127
 struct radio_hci_command_hdr {
 	__le16	opcode;		/* OCF & OGF */
 	__u8	plen;
@@ -340,7 +343,7 @@ struct hci_fm_ssbi_peek {
 } __packed;
 
 struct hci_fm_ch_det_threshold {
-	char sinr;
+	signed char sinr;
 	__u8 sinr_samples;
 	__u8 low_th;
 	__u8 high_th;
@@ -390,10 +393,13 @@ struct hci_fm_blend_table {
 
 #define RDSGRP_DATA_OFFSET	 0x1
 
+#define RDS_GRPS_ALL 0xFFFFFFFF
 /*RT PLUS*/
 #define DUMMY_CLASS		0
 #define RT_PLUS_LEN_1_TAG	3
 #define RT_ERT_FLAG_BIT		5
+#define ITEM_TOGGLE_BIT     4
+#define ITEM_RUNNING_BIT    3
 
 /*TAG1*/
 #define TAG1_MSB_OFFSET		3
@@ -607,6 +613,11 @@ struct hci_fm_spur_data {
 #define RDS_PS_DATA_OFFSET 8
 #define RDS_CONFIG_OFFSET  3
 #define RDS_AF_JUMP_OFFSET 4
+#define RDS_RT_OFFSET 0
+#define RDS_PS_ALL_OFFSET 1
+#define RDS_PS_SIMPLE_OFFSET 2
+#define RDS_AF_LIST_OFFSET 3
+#define RDS_GRP_3A 6
 #define PI_CODE_OFFSET 4
 #define AF_SIZE_OFFSET 6
 #define AF_LIST_OFFSET 7

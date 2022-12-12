@@ -129,10 +129,20 @@ void wcd_enable_curr_micbias(const struct wcd_mbhc *mbhc,
 
 	switch (cs_mb_en) {
 	case WCD_MBHC_EN_CS:
+//+bug 603257,zhouweijie.wt,modify,20201203,modify mic mode from cs to mb
+#ifdef CONFIG_ARCH_MSM8953
+		WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_BTN_ISRC_CTL, 3);
+		WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_FSM_EN, 1);
+		WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_MICB_CTRL, 1);
+		/* Program Button threshold registers as per MICBIAS */
+		wcd_program_btn_threshold(mbhc, true);
+#else
 		WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_MICB_CTRL, 0);
 		WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_BTN_ISRC_CTL, 3);
 		/* Program Button threshold registers as per CS */
 		wcd_program_btn_threshold(mbhc, false);
+#endif
+//-bug 603257,zhouweijie.wt,modify,20201203,modify mic mode from cs to mb
 		break;
 	case WCD_MBHC_EN_MB:
 		WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_BTN_ISRC_CTL, 0);
@@ -561,6 +571,20 @@ void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 
 	pr_debug("%s: enter insertion %d hph_status %x\n",
 		 __func__, insertion, mbhc->hph_status);
+//+bug 603250,zhouweijie.wt,modify,20201203,modify for car aux cable function
+#ifdef  CONFIG_ARCH_MSM8953
+    if (jack_type == SND_JACK_LINEOUT) {
+        jack_type = SND_JACK_HEADPHONE;
+    }
+#endif
+//-bug 603250,zhouweijie.wt,modify,20201203,modify for car aux cable function
+//+bug 603945, tangliang1.wt, modify, 20201211, modify for car AUX cable function
+#ifdef CONFIG_SND_SOC_AW87319
+    if (jack_type == SND_JACK_LINEOUT) {
+	    jack_type = SND_JACK_HEADPHONE;
+    }
+#endif
+//-bug 603945, tangliang1.wt, modify, 20201211, modify for car AUX cable function
 	if (!insertion) {
 		/* Report removal */
 		mbhc->hph_status &= ~jack_type;
@@ -601,7 +625,15 @@ void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 			 jack_type, mbhc->hph_status);
 		wcd_mbhc_jack_report(mbhc, &mbhc->headset_jack,
 				mbhc->hph_status, WCD_MBHC_JACK_MASK);
-		wcd_mbhc_set_and_turnoff_hph_padac(mbhc);
+/* +Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
+#ifdef CONFIG_SND_SOC_AW87319
+        if(0) {
+		    wcd_mbhc_set_and_turnoff_hph_padac(mbhc);
+        }
+#else
+        wcd_mbhc_set_and_turnoff_hph_padac(mbhc);
+#endif
+/* -Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
 		hphrocp_off_report(mbhc, SND_JACK_OC_HPHR);
 		hphlocp_off_report(mbhc, SND_JACK_OC_HPHL);
 		mbhc->current_plug = MBHC_PLUG_TYPE_NONE;

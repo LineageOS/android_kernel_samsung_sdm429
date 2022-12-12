@@ -25,10 +25,11 @@ ifeq ($(KERNEL_BUILD), 0)
 		export
 		INCS    +=  -include $(AUDIO_ROOT)/config/sdm710autoconf.h
 	endif
+#bug600729,zhouweijie.wt,modify,20201120,Q->R audio bring up
 	ifeq ($(CONFIG_ARCH_SDM450), y)
-		include $(AUDIO_ROOT)/config/sdm450auto.conf
+		include $(AUDIO_ROOT)/config/sdm450auto_n9.conf
 		export
-		INCS    +=  -include $(AUDIO_ROOT)/config/sdm450autoconf.h
+		INCS    +=  -include $(AUDIO_ROOT)/config/sdm450autoconf_n9.h
 	endif
 	ifeq ($(CONFIG_ARCH_SDM439), y)
 		include $(AUDIO_ROOT)/config/sdm450auto.conf

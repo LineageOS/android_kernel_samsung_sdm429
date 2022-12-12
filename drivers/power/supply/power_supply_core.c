@@ -790,6 +790,9 @@ __power_supply_register(struct device *parent,
 	if (rc)
 		goto create_triggers_failed;
 
+	//Bug 601075  ,xuyanan.wt,20201118,add,sar sensor bringup
+	atomic_notifier_call_chain(&power_supply_notifier, PSY_EVENT_PROP_ADDED, psy);
+
 	/*
 	 * Update use_cnt after any uevents (most notably from device_add()).
 	 * We are here still during driver's probe but
@@ -954,7 +957,10 @@ EXPORT_SYMBOL_GPL(devm_power_supply_register_no_ws);
 void power_supply_unregister(struct power_supply *psy)
 {
 	WARN_ON(atomic_dec_return(&psy->use_cnt));
-	psy->removing = true;
+    /*+bug603256  xieyu.wt,20201124 add sar sensor bringup*/
+    atomic_notifier_call_chain(&power_supply_notifier, PSY_EVENT_PROP_REMOVED, psy);
+    /*-bug603256  xieyu.wt,20201124 add sar sensor bringup*/
+    psy->removing = true;
 	cancel_work_sync(&psy->changed_work);
 	cancel_delayed_work_sync(&psy->deferred_register_work);
 	sysfs_remove_link(&psy->dev.kobj, "powers");

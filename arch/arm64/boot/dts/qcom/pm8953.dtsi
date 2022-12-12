@@ -40,6 +40,12 @@
 			qcom,pon_1 {
 				qcom,pon-type = <0>;
 				qcom,pull-up = <1>;
+				/*+chk78413,linyaosen.wt,add,20210309,long press powerkey for auto reboot*/
+				qcom,support-reset = <1>;
+				qcom,s1-timer = <6720>;
+				qcom,s2-timer = <2000>;
+				qcom,s2-type = <7>;
+				/*-chk78413,linyaosen.wt,add,20210309,long press powerkey for auto reboot*/
 				linux,code = <116>;
 			};
 
@@ -116,6 +122,16 @@
 			gpio-controller;
 			#gpio-cells = <2>;
 			qcom,gpios-disallowed = <3 6>;
+
+			afc_switch {
+				afc_switch_default: afc_switch_default {
+					pins = "gpio1";
+					function = "normal";
+					power-source = <0>;
+					output-low;
+					input-disable;
+				};
+			};
 		};
 
 		pm8953_vadc: vadc@3100 {
@@ -254,8 +270,19 @@
 				qcom,fast-avg-setup = <0>;
 				qcom,vadc-thermal-node;
 			};
+//+Bug 603257, zhouweijie.wt, add , 20201130, add for mbhc adc detect
+			chan@21 {
+				label = "mpp2_5v";
+				reg = <0x21>;
+				qcom,decimation = <0>;
+				qcom,pre-div-channel-scaling = <1>;
+				qcom,calibration-type = "ratiometric";
+				qcom,scale-function = <0>;
+				qcom,hw-settle-time = <1>;
+				qcom,fast-avg-setup = <2>;
+			};
 		};
-
+//-Bug 603257, zhouweijie.wt, add , 20201130, add for mbhc adc detect
 		pm8953_adc_tm: vadc@3400 {
 			compatible = "qcom,qpnp-adc-tm";
 			reg = <0x3400 0x100>;

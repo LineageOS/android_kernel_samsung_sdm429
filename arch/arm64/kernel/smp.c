@@ -59,6 +59,10 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/ipi.h>
 
+#ifdef CONFIG_SEC_DEBUG
+#include <linux/sec_debug.h>
+#endif
+
 DEFINE_PER_CPU_READ_MOSTLY(int, cpu_number);
 EXPORT_PER_CPU_SYMBOL(cpu_number);
 
@@ -853,6 +857,9 @@ static void ipi_cpu_stop(unsigned int cpu, struct pt_regs *regs)
 		pr_crit("CPU%u: stopping\n", cpu);
 		show_regs(regs);
 		dump_stack();
+#ifdef CONFIG_SEC_DEBUG
+		sec_debug_save_context();
+#endif
 		dump_stack_minidump(regs->sp);
 		raw_spin_unlock(&stop_lock);
 	}

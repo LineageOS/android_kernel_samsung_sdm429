@@ -1001,6 +1001,7 @@ static enum vidc_status hfi_parse_init_done_properties(
 	enum vidc_status status = VIDC_ERR_NONE;
 	u32 prop_id, next_offset;
 	u32 codecs = 0, domain = 0;
+	
 
 #define VALIDATE_PROPERTY_STRUCTURE_SIZE(pkt_size, property_size) ({\
 		if (pkt_size < property_size) { \
@@ -1029,7 +1030,7 @@ static enum vidc_status hfi_parse_init_done_properties(
 			struct hfi_codec_mask_supported *prop =
 				(struct hfi_codec_mask_supported *)
 				(data_ptr + next_offset);
-
+				
 			VALIDATE_PROPERTY_STRUCTURE_SIZE(rem_bytes -
 					next_offset,
 					sizeof(*prop));
@@ -1098,6 +1099,7 @@ static enum vidc_status hfi_parse_init_done_properties(
 					plane_info->num_planes *
 					sizeof(struct
 					hfi_uncompressed_plane_constraints);
+					
 
 				VALIDATE_PROPERTY_STRUCTURE_SIZE(rem_bytes -
 						next_offset,
@@ -1134,6 +1136,7 @@ static enum vidc_status hfi_parse_init_done_properties(
 			struct hfi_profile_level_supported *prop =
 				(struct hfi_profile_level_supported *)
 				(data_ptr + next_offset);
+				
 
 			VALIDATE_PROPERTY_STRUCTURE_SIZE(rem_bytes -
 					next_offset,
@@ -1167,6 +1170,7 @@ static enum vidc_status hfi_parse_init_done_properties(
 			struct hfi_nal_stream_format_supported *prop =
 				(struct hfi_nal_stream_format_supported *)
 					(data_ptr + next_offset);
+					
 
 			VALIDATE_PROPERTY_STRUCTURE_SIZE(rem_bytes -
 					next_offset,
@@ -1226,6 +1230,7 @@ static enum vidc_status hfi_parse_init_done_properties(
 		} else {
 			rem_bytes = 0;
 		}
+
 	}
 
 	return status;

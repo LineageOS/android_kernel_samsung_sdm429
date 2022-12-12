@@ -15,7 +15,6 @@
 	int_codec: sound {
 		qcom,model = "sdm439-snd-card-mtp";
 		qcom,msm-hs-micbias-type = "internal";
-		qcom,msm-micbias2-ext-cap;
 
 		asoc-codec = <&stub_codec>, <&msm_digital_codec>,
 				<&pmic_analog_codec>;
@@ -44,7 +43,7 @@
 	pinctrl-names = "active", "sleep";
 	pinctrl-0 = <&tasha_mclk_default>;
 	pinctrl-1 = <&tasha_mclk_default>;
-	qcom,audio-ref-clk-gpio = <&pm8953_gpios 1 0>;
+	//qcom,audio-ref-clk-gpio = <&pm8953_gpios 1 0>;
 };
 
 &wcd9335 {

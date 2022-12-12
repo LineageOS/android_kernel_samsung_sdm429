@@ -294,8 +294,17 @@ static void mdss_fb_set_bl_brightness(struct led_classdev *led_cdev,
 	/* This maps android backlight level 0 to 255 into
 	 * driver backlight level 0 to bl_max with rounding
 	 */
-	MDSS_BRIGHT_TO_BL(bl_lvl, value, mfd->panel_info->bl_max,
+
+	//+bug 600732, wangcong.wt, add, 2020/11/11, Add Lcd backlight map
+	if (mfd->panel_info->blmap){
+			bl_lvl = mfd->panel_info->blmap[value];
+	}
+	else{
+		MDSS_BRIGHT_TO_BL(bl_lvl, value, mfd->panel_info->bl_max,
 				mfd->panel_info->brightness_max);
+	}
+	pr_debug("%s: value %d  bl_lvl %lld\n", __func__, value, bl_lvl);
+	//-bug 600732, wangcong.wt, add, 2020/11/11, Add Lcd backlight map
 
 	if (!bl_lvl && value)
 		bl_lvl = 1;
@@ -2033,6 +2042,11 @@ error:
 	return ret;
 }
 
+//+Bug 455539 gudi.wt, MODIFY, 20190724,s86119 control charging current in lcd on or off
+#ifdef CONFIG_ARCH_MSM8953
+extern bool usbchg_lcd_is_on;
+#endif
+//-Bug 455539 gudi.wt, MODIFY, 20190724,s86119 control charging current in lcd on or off
 static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 			     int op_enable)
 {
@@ -2049,7 +2063,8 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 
 	pr_debug("%pS mode:%d\n", __builtin_return_address(0),
 		blank_mode);
-
+	//bug 600732, wangcong.wt, add, 2020/11/11, Add Lcd debug info
+	pr_info("LCD_LOG: %s  blank_mode %d +++ \n", __func__, blank_mode);
 	snprintf(trace_buffer, sizeof(trace_buffer), "fb%d blank %d",
 		mfd->index, blank_mode);
 	ATRACE_BEGIN(trace_buffer);
@@ -2087,6 +2102,11 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 	case FB_BLANK_UNBLANK:
 		pr_debug("unblank called. cur pwr state=%d\n", cur_power_state);
 		ret = mdss_fb_blank_unblank(mfd);
+                //+Bug 455539 gudi.wt, MODIFY, 20190724, control charging current in lcd on or off
+                #ifdef CONFIG_ARCH_MSM8953
+                usbchg_lcd_is_on = 1;
+                #endif
+                //-Bug 455539 gudi.wt, MODIFY, 20190724, control charging current in lcd on or off
 		break;
 	case BLANK_FLAG_ULP:
 		req_power_state = MDSS_PANEL_POWER_LP2;
@@ -2121,6 +2141,11 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 		req_power_state = MDSS_PANEL_POWER_OFF;
 		pr_debug("blank powerdown called\n");
 		ret = mdss_fb_blank_blank(mfd, req_power_state);
+                //+Bug 455539 gudi.wt, MODIFY, 20190724,s86119 control charging current in lcd on or off
+                #ifdef CONFIG_ARCH_MSM8953
+                usbchg_lcd_is_on = 0;
+                #endif
+                //-Bug 455539 gudi.wt, MODIFY, 20190724,s86119 control charging current in lcd on or off
 		break;
 	}
 
@@ -2128,7 +2153,8 @@ static int mdss_fb_blank_sub(int blank_mode, struct fb_info *info,
 	sysfs_notify(&mfd->fbi->dev->kobj, NULL, "show_blank_event");
 
 	ATRACE_END(trace_buffer);
-
+	//bug 600732, wangcong.wt,add, 2020/11/11, Add Lcd debug info
+	pr_info("LCD_LOG: %s  blank_mode %d --- \n", __func__, blank_mode);
 	return ret;
 }
 

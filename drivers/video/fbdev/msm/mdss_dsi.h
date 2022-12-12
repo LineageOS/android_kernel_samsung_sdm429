@@ -436,6 +436,8 @@ struct mdss_dsi_ctrl_pdata {
 	int irq_cnt;
 	int disp_te_gpio;
 	int rst_gpio;
+	//bug 600732, wangcong.wt, modify, 2020/11/11, Modify ft8006p tianma timming sequence
+	int wt_tp_rst_gpio;
 	int disp_en_gpio;
 	int bklt_en_gpio;
 	int vdd_ext_gpio;
@@ -641,6 +643,8 @@ int mdss_dsi_pre_clkon_cb(void *priv,
 			  enum mdss_dsi_lclk_type l_type,
 			  enum mdss_dsi_clk_state new_state);
 int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable);
+//bug 600732, wangcong.wt, modify, 2020/11/11, Modify ft8006p tianma timming sequence
+int mdss_dsi_ft_panel_reset(struct mdss_panel_data *pdata, int enable);
 void mdss_dsi_phy_disable(struct mdss_dsi_ctrl_pdata *ctrl);
 void mdss_dsi_cmd_test_pattern(struct mdss_dsi_ctrl_pdata *ctrl);
 void mdss_dsi_video_test_pattern(struct mdss_dsi_ctrl_pdata *ctrl);

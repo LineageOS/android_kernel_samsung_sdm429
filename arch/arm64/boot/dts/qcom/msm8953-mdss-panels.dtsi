@@ -29,6 +29,15 @@
 #include "dsi-panel-hx8394d-wxga-video.dtsi"
 #include "dsi-panel-inxnt51021-1200p-video.dtsi"
 
+//+bug 600732, wangcong.wt, add, 2020/11/11, add lcd
+#include "dsi-panel-ili9881h-truly-hdp-video.dtsi"
+#include "dsi-panel-ft8006p-tianma-hdp-video.dtsi"
+#include "dsi-panel-ili9881h-hlt-hdp-video.dtsi"
+#include "dsi-panel-ili9881h-inl-hdp-video.dtsi"
+#include "dsi-panel-ili9881h-inx-hdp-video.dtsi"
+#include "dsi-panel-ili9882n-hlt-hdp-video.dtsi"
+//-bug 600732, wangcong.wt, add, 2020/11/11, add lcd
+
 &soc {
 	dsi_panel_pwr_supply: dsi_panel_pwr_supply {
 		#address-cells = <1>;
@@ -77,7 +86,8 @@
 		23 1e 08 09 05 03 04 a0
 		23 1e 08 09 05 03 04 a0
 		23 1a 08 09 05 03 04 a0];
-	qcom,esd-check-enabled;
+	//bug 600732, wangcong.wt, modify, 2020/11/11, modify esd check
+	//qcom,esd-check-enabled;
 	qcom,mdss-dsi-panel-status-check-mode = "reg_read";
 	qcom,mdss-dsi-panel-status-command = [06 01 00 01 00 00 01 0a];
 	qcom,mdss-dsi-panel-status-command-state = "dsi_hs_mode";

@@ -565,6 +565,17 @@ KBUILD_CFLAGS += $(call cc-disable-warning, unused-but-set-variable)
 KBUILD_CFLAGS += $(call cc-disable-warning, unused-const-variable)
 endif
 
+#chk72655, xieshuaishuai.wt, ADD, 20201126, add factory version & MP version macro control
+ifeq ($(WT_FINAL_RELEASE_KERNEL),yes)
+KBUILD_CFLAGS += -DWT_FINAL_RELEASE
+endif
+ifeq ($(WT_COMPILE_FACTORY_VERSION_KERNEL),yes)
+KBUILD_CFLAGS += -DWT_COMPILE_FACTORY_VERSION
+endif
+#chk72534, xieshuaishuai.wt, ADD, 20201127, ATO bainry macro after mass production.
+ifeq ($(WT_COMPILE_FACTORY_VERSION_MP),yes)
+KBUILD_CFLAGS += -DWT_COMPILE_FACTORY_VERSION_MP
+endif
 
 ifeq ($(mixed-targets),1)
 # ===========================================================================

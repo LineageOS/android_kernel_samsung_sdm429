@@ -119,6 +119,12 @@ int cam_virtual_cdm_submit_bl(struct cam_hw_info *cdm_hw,
 		if ((!rc) && (vaddr_ptr) && (len) &&
 			(len >= cdm_cmd->cmd[i].offset)) {
 
+		if ((len - cdm_cmd->cmd[i].offset) <=
+				cdm_cmd->cmd[i].len) {
+				CAM_ERR(CAM_CDM, "Not enough buffer");
+				rc = -EINVAL;
+				break;
+			}
 
 			if ((len - cdm_cmd->cmd[i].offset) <=
 				cdm_cmd->cmd[i].len) {

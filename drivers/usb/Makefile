@@ -61,5 +61,7 @@ obj-$(CONFIG_USB_GADGET)	+= gadget/
 obj-$(CONFIG_USB_COMMON)	+= common/
 
 obj-$(CONFIG_USBIP_CORE)	+= usbip/
-
+#Bug 558309, lizerong.wt, 20200522, add, add usb_notify node
+obj-$(CONFIG_USB_NOTIFIER)  += notify/
 obj-$(CONFIG_USB_PD)            += pd/
+obj-$(CONFIG_TYPEC)		+= typec/

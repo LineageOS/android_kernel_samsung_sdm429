@@ -319,7 +319,13 @@ int qg_get_battery_temp(struct qpnp_qg *chip, int *temp)
 		return 0;
 	}
 
+//+Bug 439935,xushengjuan.wt,modify,20201112,S86117AA1 charger bring up
+#ifdef CONFIG_ARCH_MSM8953
+	rc = qpnp_vadc_read(chip->vadc_dev, VADC_BAT_THERM_PU1, &result);
+#else
 	rc = qpnp_vadc_read(chip->vadc_dev, VADC_BAT_THERM_PU2, &result);
+#endif
+//-Bug 439935,xushengjuan.wt,modify,20201112,S86117AA1 charger bring up
 	if (rc) {
 		pr_err("Failed reading adc channel=%d, rc=%d\n",
 					VADC_BAT_THERM_PU2, rc);

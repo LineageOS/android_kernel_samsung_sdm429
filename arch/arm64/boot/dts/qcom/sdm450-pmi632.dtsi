@@ -36,8 +36,13 @@
 /{
 	mtp_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <15>;
-		#include "qg-batterydata-ascent-3450mah.dtsi"
-		#include "qg-batterydata-mlp356477-2800mah.dtsi"
+//+Bug 439935,xushengjuan.wt,modify,20201112,S86117AA1 charger bring up
+		/* #include "qg-batterydata-ascent-3450mah.dtsi" */
+		/*#include "qg-batterydata-mlp356477-2800mah.dtsi"*/
+		#include "batterydata-wingtech-NVT-4v4-3900mah.dtsi"
+		#include "batterydata-wingtech-Scud-4v4-3900mah.dtsi"
+		#include "batterydata-wingtech-Sunwoda-4v4-3900mah.dtsi"
+//-Bug 439935,xushengjuan.wt,modify,20201112,S86117AA1 charger bring up
 	};
 };
 
@@ -64,10 +69,27 @@
 
 &pmi632_qg {
 	qcom,battery-data = <&mtp_batterydata>;
+       //+Bug 600732,xushengjuan.wt,modify,20201118,S86117,modify S3 IBAT
+        qcom,s3-entry-ibat-ua = <18000>;
+        qcom,s3-exit-ibat-ua = <38000>;
+       //-Bug 600732,xushengjuan.wt,modify,20201118,S86117,modify S3 IBAT
 };
 
 &pmi632_charger {
 	qcom,battery-data = <&mtp_batterydata>;
+//+Bug 439935,xushengjuan.wt,modify,20201112,S86117AA1 charger bring up
+	qcom,connector-internal-pull-kohm = <30>;
+	qcom,fcc-max-ua = <2700000>;
+	//+Bug 600732,xushengjuan.wt,modify,20201118,S86117,charger bring up
+	qcom,usb-icl-ua = <1800000>;
+	qcom,fv-max-uv = <4400000>;
+//-Bug 439935,xushengjuan.wt,modify,20201112,S86117AA1 charger bring up
+        qcom,thermal-mitigation
+                = <2700000 2350000 1900000 1500000
+                        1000000 500000>;
+	qcom,otg-cl-ua = <1000000>;
+        qcom,qg-iterm-ma = <300>;
+	//-Bug 600732,xushengjuan.wt,modify,20201118,S86117,charger bring up
 };
 
 &pm8953_gpios {

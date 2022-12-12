@@ -38,6 +38,15 @@
 
 #define XO_CLK_RATE	19200000
 #define CMDLINE_DSI_CTL_NUM_STRING_LEN 2
+#ifdef CONFIG_TOUCHSCREEN_ILI9881H
+extern void lcd_load_fw(void);
+extern bool is_ilitek_tp;
+#endif
+
+#ifdef CONFIG_TOUCHSCREEN_ILI9882N
+extern void ili_resume_by_ddi(void);
+extern bool is_ilitek_9882n_tp;
+#endif
 
 /* Master structure to hold all the information about the DSI/panel */
 static struct mdss_dsi_data *mdss_dsi_res;
@@ -377,7 +386,11 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
-	ret = mdss_dsi_panel_reset(pdata, 0);
+	//+bug 600732, wangcong.wt, modify, 2020/11/11, Modify ft8006p tianma timming sequence
+	if (pdata->panel_info.panel_name_id != FT8006P_TIANMA_HDP_VIDEO_PANEL)
+		ret = mdss_dsi_panel_reset(pdata, 0);
+	//-bug 600732, wangcong.wt, modify, 2020/11/11, Modify ft8006p tianma timming sequence
+
 	if (ret) {
 		pr_warn("%s: Panel reset failed. rc=%d\n", __func__, ret);
 		ret = 0;
@@ -390,17 +403,32 @@ static int mdss_dsi_panel_power_off(struct mdss_panel_data *pdata)
 			pr_err("%s: unable to set dir for vdd gpio\n",
 					__func__);
 	}
-
-	if (mdss_dsi_pinctrl_set_state(ctrl_pdata, false))
-		pr_debug("reset disable: pinctrl not enabled\n");
-
+	//+bug 600732, wangcong.wt, modify, 2020/11/11, Modify panel timming
+	if ((strncmp(pdata->panel_info.panel_name, "ft8006p", strlen("ft8006p")) == 0) ||
+        (strncmp(pdata->panel_info.panel_name, "ili9881h", strlen("ili9881h")) == 0) ||
+        (strncmp(pdata->panel_info.panel_name, "ili9882n", strlen("ili9882n")) == 0))
+		pr_debug("reset disable: pinctrl not do enabled\n");
+	else {
+		if (mdss_dsi_pinctrl_set_state(ctrl_pdata, false))
+			pr_debug("reset disable: pinctrl not enabled\n");
+	}
+	//-bug 600732, wangcong.wt, modify, 2020/11/11, Modify panel timming
 	ret = msm_mdss_enable_vreg(
 		ctrl_pdata->panel_power_data.vreg_config,
 		ctrl_pdata->panel_power_data.num_vreg, 0);
 	if (ret)
 		pr_err("%s: failed to disable vregs for %s\n",
 			__func__, __mdss_dsi_pm_name(DSI_PANEL_PM));
+	//+bug 600732, wangcong.wt, modify, 2020/11/11, Modify ft8006p tianma timming sequence
+	if (pdata->panel_info.panel_name_id == FT8006P_TIANMA_HDP_VIDEO_PANEL) {
+		ret = mdss_dsi_ft_panel_reset(pdata, 0);
 
+		if (ret) {
+			pr_warn("%s: Panel reset failed. rc=%d\n", __func__, ret);
+			ret = 0;
+		}
+	}
+	//-bug 600732, wangcong.wt, modify, 2020/11/11, Modify ft8006p tianma timming sequence
 end:
 	return ret;
 }
@@ -444,10 +472,16 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 	 */
 	if (pdata->panel_info.cont_splash_enabled ||
 		!pdata->panel_info.mipi.lp11_init) {
-		if (mdss_dsi_pinctrl_set_state(ctrl_pdata, true))
-			pr_debug("reset enable: pinctrl not enabled\n");
 
-		ret = mdss_dsi_panel_reset(pdata, 1);
+		//+bug 600732, wangcong.wt, modify, 2020/11/11, Modify ft8006p tianma timming sequence
+		if (pdata->panel_info.panel_name_id == FT8006P_TIANMA_HDP_VIDEO_PANEL)
+			ret = mdss_dsi_ft_panel_reset(pdata, 1);
+		else {
+			if (mdss_dsi_pinctrl_set_state(ctrl_pdata, true))
+				pr_debug("reset enable: pinctrl not enabled\n");
+			ret = mdss_dsi_panel_reset(pdata, 1);
+		}
+		//-bug 600732, wangcong.wt, modify, 2020/11/11, Modify ft8006p tianma timming sequence
 		if (ret)
 			pr_err("%s: Panel reset failed. rc=%d\n",
 					__func__, ret);
@@ -1344,6 +1378,8 @@ static int mdss_dsi_off(struct mdss_panel_data *pdata, int power_state)
 		return -EINVAL;
 	}
 
+	//bug 600732, wangminglin.wt, add, 2020/11/11, Add Lcd debug info
+	pr_info("LCD_LOG: %s   +++ \n", __func__);
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
@@ -1405,6 +1441,8 @@ panel_power_ctrl:
 	ctrl_pdata->cur_max_pkt_size = 0;
 end:
 	pr_debug("%s-:\n", __func__);
+	//bug 600732, wangcong.wt, add, 2020/11/11, Add Lcd debug info
+	pr_info("LCD_LOG: %s   +++ \n", __func__);
 
 	return ret;
 }
@@ -1522,6 +1560,8 @@ int mdss_dsi_on(struct mdss_panel_data *pdata)
 		pr_err("%s: Invalid input data\n", __func__);
 		return -EINVAL;
 	}
+	//bug 600732, wangcong.wt, add, 2020/11/11, Add Lcd debug info
+	pr_info("LCD_LOG: %s   +++ \n", __func__);
 
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
@@ -1597,9 +1637,15 @@ int mdss_dsi_on(struct mdss_panel_data *pdata)
 	 * data lanes for LP11 init
 	 */
 	if (mipi->lp11_init) {
-		if (mdss_dsi_pinctrl_set_state(ctrl_pdata, true))
-			pr_debug("reset enable: pinctrl not enabled\n");
-		mdss_dsi_panel_reset(pdata, 1);
+		//+bug 600732, wangcong.wt, modify, 2020/11/11, Modify ft8006p tianma timming sequence
+		if (pdata->panel_info.panel_name_id == FT8006P_TIANMA_HDP_VIDEO_PANEL)
+			ret = mdss_dsi_ft_panel_reset(pdata, 1);
+		else {
+			if (mdss_dsi_pinctrl_set_state(ctrl_pdata, true))
+				pr_debug("reset enable: pinctrl not enabled\n");
+			ret = mdss_dsi_panel_reset(pdata, 1);
+		}
+		//-bug 600732, wangcong.wt, modify, 2020/11/11, Modify ft8006p tianma timming sequence
 	}
 
 	if (mipi->init_delay)
@@ -1619,7 +1665,20 @@ int mdss_dsi_on(struct mdss_panel_data *pdata)
 				  MDSS_DSI_ALL_CLKS, MDSS_DSI_CLK_OFF);
 
 end:
+
+#ifdef CONFIG_TOUCHSCREEN_ILI9881H
+	if(is_ilitek_tp)
+		lcd_load_fw();
+#endif
+
+#ifdef CONFIG_TOUCHSCREEN_ILI9882N
+	if(is_ilitek_9882n_tp)
+		ili_resume_by_ddi();
+#endif
+
 	pr_debug("%s-:\n", __func__);
+	//bug 600732, wangcong.wt, add, 2020/11/11, Add Lcd debug info
+	pr_info("LCD_LOG: %s   --- \n", __func__);
 	return ret;
 }
 
@@ -4222,6 +4281,14 @@ static int mdss_dsi_parse_gpio_params(struct platform_device *ctrl_pdev,
 	if (!gpio_is_valid(ctrl_pdata->rst_gpio))
 		pr_err("%s:%d, reset gpio not specified\n",
 						__func__, __LINE__);
+
+	//+bug 600732, wangcong.wt, modify, 2020/11/11, Modify ft8006p tianma timming sequence
+	ctrl_pdata->wt_tp_rst_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
+			 "qcom,platform-tp-reset-gpio", 0);
+	if (!gpio_is_valid(ctrl_pdata->wt_tp_rst_gpio))
+		pr_err("%s:%d, tp reset gpio not specified\n",
+						__func__, __LINE__);
+	//-bug 600732, wangcong.wt, modify, 2020/11/11, Modify ft8006p tianma timming sequence
 
 	if (pinfo->mode_gpio_state != MODE_GPIO_NOT_VALID) {
 

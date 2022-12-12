@@ -154,6 +154,7 @@ config INPUT_JOYDEV
 
 config INPUT_EVDEV
 	tristate "Event interface"
+	select SEC_INPUT_BOOSTER
 	help
 	  Say Y here if you want your input device events be accessible
 	  under char device 13:64+ - /dev/input/eventX in a generic way.
@@ -200,6 +201,15 @@ config INPUT_KEYCOMBO
 	---help---
 	  Say Y here if you want to take action when some keys are pressed;
 
+config SEC_INPUT_BOOSTER
+	bool "SEC INPUT BOOSTER"
+	depends on INPUT_EVDEV
+	default y
+	help
+	  Say Y here if you need to enable Input Booster.
+
+	  It's triggered in evdev module.
+
 comment "Input Device Drivers"
 
 source "drivers/input/keyboard/Kconfig"
@@ -219,6 +229,15 @@ source "drivers/input/sensors/smi130/Kconfig"
 source "drivers/input/rmi4/Kconfig"
 
 endif
+
+config FINGERPRINT
+	bool "fingerprint fpc"
+	default y
+	help
+	  Say Y here if you have a fpc
+          If unsure, say N.
+
+source "drivers/input/fingerprint/Kconfig"
 
 menu "Hardware I/O ports"
 

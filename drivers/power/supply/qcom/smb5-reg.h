@@ -120,6 +120,10 @@ enum {
 
 #define AICL_STATUS_REG				(DCDC_BASE + 0x0A)
 #define SOFT_ILIMIT_BIT				BIT(6)
+#if defined(CONFIG_AFC)
+#define USBIN_CH_COLLAPSE 			BIT(4)
+#define ICL_IMIN  					BIT(2)
+#endif
 #define AICL_DONE_BIT				BIT(0)
 
 #define POWER_PATH_STATUS_REG			(DCDC_BASE + 0x0B)
@@ -225,15 +229,18 @@ enum {
 
 #define USB_CMD_PULLDOWN_REG			(USBIN_BASE + 0x45)
 #define EN_PULLDOWN_USB_IN_BIT			BIT(0)
-
+//+Bug 600732,xushengjuan.wt,modify,20201118,S86117,(Patch)Handle QC2.0 charger collapse.
+#ifdef CONFIG_ARCH_MSM8953
 #define HVDCP_PULSE_COUNT_MAX_REG              (USBIN_BASE + 0x5B)
 #define HVDCP_PULSE_COUNT_MAX_QC2_MASK         GENMASK(7, 6)
 enum {
-	HVDCP_PULSE_COUNT_MAX_QC2_5V,
-	HVDCP_PULSE_COUNT_MAX_QC2_9V,
-	HVDCP_PULSE_COUNT_MAX_QC2_12V,
-	HVDCP_PULSE_COUNT_MAX_QC2_INVALID
+	HVDCP_PULSE_COUNT_MAX_QC2_5V = 0,
+	HVDCP_PULSE_COUNT_MAX_QC2_9V = 0x40,
+	HVDCP_PULSE_COUNT_MAX_QC2_12V = 0x80,
+	HVDCP_PULSE_COUNT_MAX_QC2_INVALID = 0xC0
 };
+#endif
+//-Bug 600732,xushengjuan.wt,modify,20201118,S86117,(Patch)Handle QC2.0 charger collapse.
 
 #define USBIN_ADAPTER_ALLOW_CFG_REG		(USBIN_BASE + 0x60)
 enum {
@@ -255,6 +262,13 @@ enum {
 #define HVDCP_EN_BIT				BIT(2)
 
 #define USBIN_OPTIONS_2_CFG_REG			(USBIN_BASE + 0x63)
+
+//+Bug 600732,xushengjuan.wt,modify,20201118,S86117,taking 3-4 sec to connect charger
+#ifdef CONFIG_ARCH_MSM8953
+#define DCD_TIME_CFG_BIT			BIT(5)
+#endif
+//-Bug 600732,xushengjuan.wt,modify,20201118,S86117,taking 3-4 sec to connect charger
+
 #define FLOAT_OPTIONS_MASK			GENMASK(2, 0)
 #define FLOAT_DIS_CHGING_CFG_BIT		BIT(2)
 #define SUSPEND_FLOAT_CFG_BIT			BIT(1)
@@ -273,7 +287,12 @@ enum {
 #define USBIN_CURRENT_LIMIT_CFG_REG		(USBIN_BASE + 0x70)
 
 #define USBIN_AICL_OPTIONS_CFG_REG		(USBIN_BASE + 0x80)
+//+Bug 600732,xushengjuan.wt,modify,20201118,S86117,(Patch)Handle QC2.0 charger collapse.
+//#ifdef CONFIG_ARCH_MSM8953
+#if (defined(CONFIG_ARCH_MSM8953) || defined(CONFIG_ARCH_SDM429))	//chk78719 ,liuzhiqing.wt,modify, 2021/02/24,Disable 0x1380 's BIT[3] BIT[7],without adaptor plug into device,device show charging
 #define SUSPEND_ON_COLLAPSE_USBIN_BIT		BIT(7)
+#endif
+//-Bug 600732,xushengjuan.wt,modify,20201118,S86117,(Patch)Handle QC2.0 charger collapse.
 #define USBIN_AICL_PERIODIC_RERUN_EN_BIT	BIT(4)
 #define USBIN_AICL_ADC_EN_BIT			BIT(3)
 
@@ -330,7 +349,8 @@ enum {
 #define U_USB_FLOAT2_BIT			BIT(0)
 
 #define TYPE_C_MODE_CFG_REG			(TYPEC_BASE + 0x44)
-#define TYPEC_POWER_ROLE_CMD_MASK		GENMASK(2, 1)
+#define TYPEC_TRY_MODE_MASK			GENMASK(4, 3)
+#define TYPEC_POWER_ROLE_CMD_MASK		GENMASK(2, 0)
 #define EN_TRY_SNK_BIT				BIT(4)
 #define EN_SRC_ONLY_BIT				BIT(2)
 #define EN_SNK_ONLY_BIT				BIT(1)
@@ -425,6 +445,11 @@ enum {
 #define BITE_WDOG_DISABLE_CHARGING_CFG_BIT	BIT(7)
 #define BARK_WDOG_TIMEOUT_MASK			GENMASK(3, 2)
 #define BITE_WDOG_TIMEOUT_MASK			GENMASK(1, 0)
+
+//+Bug 600732,xushengjuan.wt,modify,20201118,S86117,poweroff charger current drop.
+#define MISC_AICL_RERUN_TIME_CFG            (MISC_BASE + 0x61)
+#define MISC_AICL_TIME_MASK                      GENMASK(1, 0)
+//+Bug 600732,xushengjuan.wt,modify,20201118,S86117,poweroff charger current drop.
 
 #define MISC_THERMREG_SRC_CFG_REG		(MISC_BASE + 0x70)
 #define THERMREG_SW_ICL_ADJUST_BIT		BIT(7)

@@ -30,8 +30,11 @@
 /{
 	mtp_batterydata: qcom,battery-data {
 		qcom,batt-id-range-pct = <15>;
-		#include "qg-batterydata-ascent-3450mah.dtsi"
-		#include "qg-batterydata-mlp356477-2800mah.dtsi"
+		//+Bug601084, yangpingao.wt, modify, 2020/11/15, P81081 charger bring up
+		#include "batterydata-wingtech-Sunwoda-4v4-4980mah.dtsi"
+		#include "batterydata-wingtech-Scud-4v4-4980mah.dtsi"
+		#include "batterydata-wingtech-Jiade-4v4-4980mah.dtsi"
+		//-Bug601084, yangpingao.wt, modify, 2020/11/15, P81081 charger bring up
 	};
 };
 
@@ -100,7 +103,8 @@
 
 	soc {
 		cooling-maps {
-			soc_map0 {
+	//+Extb P210423-03864, chenwende.wt, Modify, 20210510, modify the func of offline cpu -- only offline cpu3.
+			/*soc_map0 {
 				trip = <&pmi632_low_soc>;
 				cooling-device =
 					<&CPU0 THERMAL_MAX_LIMIT
@@ -117,7 +121,8 @@
 				cooling-device =
 					<&CPU2 THERMAL_MAX_LIMIT
 						THERMAL_MAX_LIMIT>;
-			};
+			};*/
+	//-Extb P210423-03864, chenwende.wt, Modify, 20210510, modify the func of offline cpu -- only offline cpu3.
 			soc_map3 {
 				trip = <&pmi632_low_soc>;
 				cooling-device =
@@ -134,45 +139,16 @@
 		thermal-governor = "step_wise";
 		wake-capable-sensor;
 
+/*+Extb P210423-03864, chenwende.wt, Modify, 20210510, N8R-Modify the thermal thresholds of modem and battery */
 		trips {
-			quiet_batt_439_trip1: quiet-batt-trip1 {
-				temperature = <38000>;
-				hysteresis = <2000>;
-				type = "passive";
-			};
-			quiet_batt_439_trip2: quiet-batt-trip2 {
-				temperature = <40000>;
-				hysteresis = <2000>;
-				type = "passive";
-			};
-			quiet_batt_439_trip3: quiet-batt-trip3 {
-				temperature = <42000>;
-				hysteresis = <2000>;
-				type = "passive";
-			};
-			quiet_batt_439_trip4: quiet-batt-trip4 {
-				temperature = <44000>;
-				hysteresis = <2000>;
-				type = "passive";
-			};
 			quiet_modem_439_trip1: quiet-modem-trip0 {
-				temperature = <44000>;
+				temperature = <74000>;
 				hysteresis = <4000>;
 				type = "passive";
 			};
 			quiet_modem_439_trip2: quiet-modem-trip1 {
-				temperature = <46000>;
+				temperature = <76000>;
 				hysteresis = <4000>;
-				type = "passive";
-			};
-			quiet_batt_439_trip5: quiet-batt-trip5 {
-				temperature = <46000>;
-				hysteresis = <2000>;
-				type = "passive";
-			};
-			quiet_439_batt_trip6_mdm_trip3: quiet-bt-trp6-mdm-trp3 {
-				temperature = <48000>;
-				hysteresis = <2000>;
 				type = "passive";
 			};
 			quiet_cpus_439_trip: quiet-cpus-trip {
@@ -180,19 +156,45 @@
 				hysteresis = <0>;
 				type = "passive";
 			};
+			quiet_modem_439_trip3: quiet-modem-trip2 {
+				temperature = <78000>;
+				hysteresis = <2000>;
+				type = "passive";
+			};
+			quiet_batt_439_trip1: quiet-batt-trip1 {
+				temperature = <48000>;
+				hysteresis = <4000>;
+				type = "passive";
+			};
 			quiet_gpu_439_trip: quiet-gpu-trip {
 				temperature = <50000>;
 				hysteresis = <0>;
 				type = "passive";
 			};
-			quiet_batt_439_trip7: quiet-batt-trip7 {
+			quiet_batt_439_trip2: quiet-batt-trip2 {
 				temperature = <50000>;
 				hysteresis = <2000>;
 				type = "passive";
 			};
+			quiet_batt_439_trip3: quiet-batt-trip3 {
+				temperature = <52000>;
+				hysteresis = <2000>;
+				type = "passive";
+			};
+
+			quiet_batt_439_trip4: quiet-batt-trip4 {
+				temperature = <54000>;
+				hysteresis = <2000>;
+				type = "passive";
+			};
 			quiet_modem_439_trip4: quiet-modem-trip3 {
-				temperature = <55000>;
-				hysteresis = <5000>;
+				temperature = <90000>;
+				hysteresis = <4000>;
+				type = "passive";
+			};
+			quiet_batt_439_trip5: quiet-batt-trip5 {
+				temperature = <56000>;
+				hysteresis = <2000>;
 				type = "passive";
 			};
 		};
@@ -259,7 +261,7 @@
 				cooling-device = <&modem_pa 1 1>;
 			};
 			modem_lvl2 {
-				trip = <&quiet_439_batt_trip6_mdm_trip3>;
+				trip = <&quiet_modem_439_trip3>;
 				cooling-device = <&modem_pa 2 2>;
 			};
 			modem_lvl3 {
@@ -286,16 +288,8 @@
 				trip = <&quiet_batt_439_trip5>;
 				cooling-device = <&pmi632_charger 5 5>;
 			};
-			battery_lvl6 {
-				trip = <&quiet_439_batt_trip6_mdm_trip3>;
-				cooling-device = <&pmi632_charger 6 6>;
-			};
-			battery_lvl7 {
-				trip = <&quiet_batt_439_trip7>;
-				cooling-device = <&pmi632_charger 7 7>;
-			};
-
 		};
+/*-Extb P210423-03864, chenwende.wt, Modify, 20210510, N8R-Modify the thermal thresholds of modem and battery */
 	};
 
 	quiet-therm-adc {

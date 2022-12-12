@@ -30,10 +30,39 @@
 #endif
 #include "mdss_debug.h"
 
+//+bug 600732, wangcong.wt, add, 2020/11/23, Add lcd name in boardinfo
+#include <linux/hardware_info.h>
+extern char Lcm_name[HARDWARE_MAX_ITEM_LONGTH];
+//-bug 600732, wangcong.wt, add, 2020/11/23, Add lcd name in boardinfo
+
+//+ Mtr4809, shenwenbin.wt, add, 20210126, add proc interface of mdss fb for adb rw panel reg 
+//#define DSI_READ_WRITE_PANEL_DEBUG 	1
+#ifdef CONFIG_DSI_READ_WRITE_PANEL_DEBUG
+#include <linux/proc_fs.h>
+#include <linux/uaccess.h>
+#include <linux/seq_file.h>
+#endif
+//- Mtr4809, shenwenbin.wt, add, 20210126, add proc interface of mdss fb for adb rw panel reg 
+
 #define DT_CMD_HDR 6
 #define DEFAULT_MDP_TRANSFER_TIME 14000
 
 #define VSYNC_DELAY msecs_to_jiffies(17)
+
+#ifdef CONFIG_TOUCHSCREEN_FTS_N9
+extern int fts_irq_enable(void);
+extern int flag_touch_probe;
+#endif
+
+//+ Mtr4809, shenwenbin.wt, add, 20210126, add proc interface of mdss fb for adb rw panel reg 
+#ifdef CONFIG_DSI_READ_WRITE_PANEL_DEBUG
+#define MIPI_PROC_NAME "mipi_reg"
+static struct proc_dir_entry *mipi_proc_entry = NULL;
+struct mdss_dsi_ctrl_pdata *panel_ctrl;
+char *rbuf =NULL;
+size_t mipi_data_len = 0;
+#endif
+//- Mtr4809, shenwenbin.wt, add, 20210126, add proc interface of mdss fb for adb rw panel reg 
 
 DEFINE_LED_TRIGGER(bl_led_trigger);
 
@@ -213,11 +242,20 @@ static void mdss_dsi_panel_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
 	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
 }
 
-static char led_pwm1[2] = {0x51, 0x0};	/* DTYPE_DCS_WRITE1 */
-static struct dsi_cmd_desc backlight_cmd = {
-	{DTYPE_DCS_WRITE1, 1, 0, 0, 1, sizeof(led_pwm1)},
-	led_pwm1
+//+bug 600732, wangcong.wt, modify, 2020/11/11, Modify panel timming
+static char led_pwm2[3] = {0x51, 0x0, 0x0};
+static struct dsi_cmd_desc backlight_cmd2 = {
+	{DTYPE_DCS_LWRITE, 1, 0, 0, 1, sizeof(led_pwm2)},
+	led_pwm2
 };
+
+static char led_dimming[2] = {0x53, 0x2c};
+static struct dsi_cmd_desc backlight_dimming_cmd[] = {
+    {{DTYPE_DCS_LWRITE, 1, 0, 0, 1, sizeof(led_pwm2)},led_pwm2},
+    {{DTYPE_DCS_LWRITE, 1, 0, 0, 1, sizeof(led_dimming)},led_dimming},
+};
+
+//-bug 600732, wangcong.wt, modify, 2020/11/11, Modify panel timming
 
 static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 {
@@ -231,12 +269,42 @@ static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 	}
 
 	pr_debug("%s: level=%d\n", __func__, level);
+	//+bug 600732, wangcong.wt, modify, 2020/11/11, Modify panel timming
+	if (strncmp(ctrl->panel_data.panel_info.panel_name, "ili9881h", strlen("ili9881h")) == 0 || strncmp(ctrl->panel_data.panel_info.panel_name, "ili9882n", strlen("ili9882n")) == 0) {
 
-	led_pwm1[1] = (unsigned char)level;
+		if (level == 1)
+            level = 33;  // let the minimum brightness reach 3nit
+		else
+			level = level << 4;
+
+		pr_debug("%s:  level=%d\n", __func__, level);
+		led_pwm2[1] = (unsigned char)(level >> 8);
+		led_pwm2[2] = (unsigned char)level;
+
+	} else {
+
+		led_pwm2[1] = (unsigned char)level;
+		if (level)
+			led_pwm2[2] = 8;
+		else
+			led_pwm2[2] = 0;
+	}
 
 	memset(&cmdreq, 0, sizeof(cmdreq));
-	cmdreq.cmds = &backlight_cmd;
-	cmdreq.cmds_cnt = 1;
+
+    if (pinfo->first_on_backlight > 2) {
+        cmdreq.cmds = &backlight_cmd2;
+        cmdreq.cmds_cnt = 1;
+    } else if (pinfo->first_on_backlight == 2) {
+        cmdreq.cmds = backlight_dimming_cmd;
+        cmdreq.cmds_cnt = 2;
+        pinfo->first_on_backlight++;
+    } else {
+        cmdreq.cmds = &backlight_cmd2;
+        cmdreq.cmds_cnt = 1;
+        pinfo->first_on_backlight++;
+    }
+	//-bug 600732, wangcong.wt, modify, 2020/11/11, Modify panel timming
 	cmdreq.flags = CMD_REQ_COMMIT;
 	cmdreq.rlen = 0;
 	cmdreq.cb = NULL;
@@ -522,7 +590,12 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 			usleep_range(100, 110);
 			gpio_free(ctrl_pdata->disp_en_gpio);
 		}
-		gpio_set_value((ctrl_pdata->rst_gpio), 0);
+		//+bug 600732, wangcong.wt, modify, 2020/11/11, Modify panel timming
+		if ((strncmp(pdata->panel_info.panel_name, "ili9881h", strlen("ili9881h")) == 0) || (strncmp(pdata->panel_info.panel_name, "ili9882n", strlen("ili9882n")) == 0) || (strncmp(pdata->panel_info.panel_name, "nt36525b", strlen("nt36525b")) == 0))
+			pr_err("%s:  reset not do 0 when display off \n", __func__);
+		else
+			gpio_set_value((ctrl_pdata->rst_gpio), 0);
+		//-bug 600732, wangcong.wt, modify, 2020/11/11, Modify panel timming
 		gpio_free(ctrl_pdata->rst_gpio);
 		if (gpio_is_valid(ctrl_pdata->mode_gpio))
 			gpio_free(ctrl_pdata->mode_gpio);
@@ -531,6 +604,117 @@ int mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int enable)
 exit:
 	return rc;
 }
+
+//+bug 600732, wangcong.wt, modify, 2020/11/11, Modify ft8006p tianma timming sequence
+int mdss_dsi_ft_panel_reset(struct mdss_panel_data *pdata, int enable)
+{
+	struct mdss_dsi_ctrl_pdata *ctrl_pdata = NULL;
+	struct mdss_panel_info *pinfo = NULL;
+	int rc = 0;
+
+	if (pdata == NULL) {
+		pr_err("%s: Invalid input data\n", __func__);
+		return -EINVAL;
+	}
+
+	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
+				panel_data);
+
+	pinfo = &(ctrl_pdata->panel_data.panel_info);
+
+
+	if (!gpio_is_valid(ctrl_pdata->rst_gpio)) {
+		pr_debug("%s:%d, reset line not configured\n",
+			   __func__, __LINE__);
+		return rc;
+	}
+
+	if (!gpio_is_valid(ctrl_pdata->wt_tp_rst_gpio)) {
+		pr_debug("%s:%d, tp reset line not configured\n",
+			   __func__, __LINE__);
+		return rc;
+	}
+
+	if (enable) {
+		rc = gpio_request(ctrl_pdata->rst_gpio, "disp_rst_n");
+		if (rc) {
+			pr_err("request reset gpio failed, rc=%d\n",rc);
+			return rc;
+		}
+
+		if (!pinfo->cont_splash_enabled) {
+
+			rc = gpio_request(ctrl_pdata->wt_tp_rst_gpio, "disp_tp_rst_n");
+			if (rc) {
+				pr_err("request tp reset gpio failed, rc=%d\n",rc);
+				return rc;
+			}
+
+			rc = gpio_direction_output(ctrl_pdata->wt_tp_rst_gpio,true);
+			if (rc) {
+				pr_err("%s: unable to set dir for tp rst gpio\n",
+					__func__);
+				return rc;
+			}
+			usleep_range(5000,5010);
+
+			rc = gpio_direction_output(ctrl_pdata->rst_gpio,true);
+			if (rc) {
+				pr_err("%s: unable to set dir for rst gpio\n",
+					__func__);
+				return rc;
+			}
+
+			usleep_range(5000,5010);
+			gpio_set_value((ctrl_pdata->wt_tp_rst_gpio), 0);
+			usleep_range(5000,5010);
+			gpio_set_value((ctrl_pdata->rst_gpio), 0);
+			usleep_range(5000,5010);
+			gpio_set_value((ctrl_pdata->wt_tp_rst_gpio), 1);
+			gpio_free(ctrl_pdata->wt_tp_rst_gpio);
+			usleep_range(5000,5010);
+			gpio_set_value((ctrl_pdata->rst_gpio), 1);
+			usleep_range(20000,20010);
+
+		}
+
+		if (ctrl_pdata->ctrl_state & CTRL_STATE_PANEL_INIT) {
+			pr_debug("%s: Panel Not properly turned OFF\n",
+					__func__);
+			ctrl_pdata->ctrl_state &= ~CTRL_STATE_PANEL_INIT;
+			pr_debug("%s: Reset panel done\n", __func__);
+		}
+	} else {
+
+		if (!gpio_is_valid(ctrl_pdata->wt_tp_rst_gpio)) {
+			pr_debug("%s:%d, tp reset line not configured\n",
+				   __func__, __LINE__);
+			return rc;
+		}
+
+		rc = gpio_request(ctrl_pdata->wt_tp_rst_gpio, "disp_tp_rst_n");
+		if (rc) {
+			pr_err("request tp reset gpio failed, rc=%d\n",rc);
+			return rc;
+		}
+
+		rc = gpio_direction_output(ctrl_pdata->wt_tp_rst_gpio,true);
+		if (rc) {
+			pr_err("%s: unable to set dir for tp rst gpio\n",
+				__func__);
+			return rc;
+		}
+
+		// gpio_set_value((ctrl_pdata->wt_tp_rst_gpio), 0);
+		gpio_free(ctrl_pdata->wt_tp_rst_gpio);
+
+		// gpio_set_value((ctrl_pdata->rst_gpio), 0);
+		gpio_free(ctrl_pdata->rst_gpio);
+	}
+
+	return rc;
+}
+//-bug 600732, wangcong.wt, modify, 2020/11/11, Modify ft8006p tianma timming sequence
 
 /**
  * mdss_dsi_roi_merge() -  merge two roi into single roi
@@ -923,8 +1107,16 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 		if (ctrl->ndx != DSI_CTRL_LEFT)
 			goto end;
 	}
-
+	//+bug 600732, wangcong.wt, modify, 2020/11/11, Modify disable dimming when first on backlight
+    pinfo->first_on_backlight = 1;
 	on_cmds = &ctrl->on_cmds;
+
+#ifdef CONFIG_TOUCHSCREEN_FTS_N9
+	if(flag_touch_probe ==1)
+		fts_irq_enable();
+	else
+		pr_debug("%s: the touchpanel is not probe now", __func__);
+#endif
 
 	if ((pinfo->mipi.dms_mode == DYNAMIC_MODE_SWITCH_IMMEDIATE) &&
 			(pinfo->mipi.boot_mode != pinfo->mipi.mode))
@@ -1792,9 +1984,15 @@ static bool mdss_dsi_cmp_panel_reg_v2(struct mdss_dsi_ctrl_pdata *ctrl)
 				(unsigned int)ctrl->status_value[group + i]);
 			MDSS_XLOG(ctrl->ndx, ctrl->return_buf[i],
 					ctrl->status_value[group + i]);
+			//+bug 600732, wangcong.wt, add, 2020/11/11, Add Lcd debug info
 			if (ctrl->return_buf[i] !=
-				ctrl->status_value[group + i])
+				ctrl->status_value[group + i]) {
+				pr_err("[%i] return:0x%x status:0x%x\n",
+				i, ctrl->return_buf[i],
+				(unsigned int)ctrl->status_value[group + i]);
 				break;
+			}
+			//-bug 600732, wangcong.wt, add, 2020/11/11, Add Lcd debug info
 		}
 
 		if (i == len)
@@ -2724,6 +2922,10 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	const char *data;
 	static const char *pdest;
 	struct mdss_panel_info *pinfo = &(ctrl_pdata->panel_data.panel_info);
+	//+bug 600732, wangcong.wt, add, 2020/11/11, Add Lcd backlight map
+	u32 *array;
+	int bl_i;
+	//-bug 600732, wangcong.wt, add, 2020/11/11, Add Lcd backlight map
 
 	if (mdss_dsi_is_hw_config_split(ctrl_pdata->shared_data))
 		pinfo->is_split_display = true;
@@ -2788,6 +2990,41 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-bl-max-level", &tmp);
 	pinfo->bl_max = (!rc ? tmp : 255);
 	ctrl_pdata->bklt_max = pinfo->bl_max;
+
+	//+bug 600732, wangcong.wt, add, 2020/11/11, Add Lcd backlight map
+	rc = of_property_read_u32(np, "ss,blmap-size", &tmp);
+			pinfo->blmap_size = (!rc ? tmp : 0);
+
+	if (pinfo->blmap_size) {
+			array = kzalloc(sizeof(u32) * pinfo->blmap_size, GFP_KERNEL);
+
+		if (!array)
+			return -ENOMEM;
+
+		rc = of_property_read_u32_array(np,
+						"ss,blmap", array, pinfo->blmap_size);
+
+		if (rc) {
+			pr_err("%s:%d, unable to read backlight map\n",
+						__func__, __LINE__);
+			kfree(array);
+			goto error;
+		}
+
+		pinfo->blmap = kzalloc(sizeof(int) * pinfo->blmap_size,
+								GFP_KERNEL);
+			if (!pinfo->blmap) {
+				kfree(array);
+				return -ENOMEM;
+			}
+
+			for (bl_i = 0; bl_i < pinfo->blmap_size; bl_i++)
+				pinfo->blmap[bl_i] = array[bl_i];
+			kfree(array);
+	} else {
+			pinfo->blmap = NULL;
+	}
+	//-bug 600732, wangcong.wt, add, 2020/11/11, Add Lcd backlight map
 
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-interleave-mode", &tmp);
 	pinfo->mipi.interleave_mode = (!rc ? tmp : 0);
@@ -2910,6 +3147,11 @@ static int mdss_panel_parse_dt(struct device_node *np,
 
 	mdss_dsi_parse_mdp_kickoff_threshold(np, pinfo);
 
+	//+bug 600732, wangcong.wt, modify, 2020/11/11, Modify ft8006p tianma timming sequence
+	rc = of_property_read_u32(np, "qcom,panel-name-id", &tmp);
+	pinfo->panel_name_id = (!rc ? tmp : 0);
+	//-bug 600732, wangcong.wt, modify, 2020/11/11, Modify ft8006p tianma timming sequence
+
 	pinfo->mipi.lp11_init = of_property_read_bool(np,
 					"qcom,mdss-dsi-lp11-init");
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-init-delay-us", &tmp);
@@ -2970,6 +3212,323 @@ error:
 	return -EINVAL;
 }
 
+//+ Mtr4809, shenwenbin.wt, add, 20210126, add proc interface of mdss fb for adb rw panel reg 
+#ifdef CONFIG_DSI_READ_WRITE_PANEL_DEBUG
+static char string_to_hex(const char *str)
+{
+	char val_l = 0;
+	char val_h = 0;
+
+	if (str[0] >= '0' && str[0] <= '9')
+		val_h = str[0] - '0';
+	else if (str[0] <= 'f' && str[0] >= 'a')
+		val_h = 10 + str[0] - 'a';
+	else if (str[0] <= 'F' && str[0] >= 'A')
+		val_h = 10 + str[0] - 'A';
+
+	if (str[1] >= '0' && str[1] <= '9')
+		val_l = str[1]-'0';
+	else if (str[1] <= 'f' && str[1] >= 'a')
+		val_l = 10 + str[1] - 'a';
+	else if (str[1] <= 'F' && str[1] >= 'A')
+		val_l = 10 + str[1] - 'A';
+
+	return (val_h << 4) | val_l;
+}
+
+static int string_merge_into_buf(const char *str, int len, char *buf)
+{
+	int buf_size = 0;
+	int i = 0;
+	const char *p = str;
+
+	while (i < len) {
+		if (((p[0] >= '0' && p[0] <= '9') ||
+			(p[0] <= 'f' && p[0] >= 'a') ||
+			(p[0] <= 'F' && p[0] >= 'A'))
+			&& ((i + 1) < len)) {
+			buf[buf_size] = string_to_hex(p);
+			printk("%02x\n", buf[buf_size]);
+			buf_size++;
+			i += 2;
+			p += 2;
+		} else {
+			i++;
+			p++;
+		}
+	}
+	return buf_size;
+}
+
+static int mdss_dsi_parse_procfs_cmds(struct dsi_panel_cmds *pcmds , char *data, int count)
+{
+	int blen = 0, len;
+	char  *buf,*bp;
+	struct dsi_ctrl_hdr *dchdr;
+	int cnt, i;
+	
+	blen = count;
+	buf = kzalloc(blen+1, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+	memcpy(buf, data, blen+1);
+	//scan dcs commands 
+	bp = buf;
+	len = blen;
+	cnt = 0;
+	while (len >= sizeof(*dchdr)) {
+		dchdr = (struct dsi_ctrl_hdr *)bp;
+		dchdr->dlen = ntohs(dchdr->dlen);
+		if (dchdr->dlen > len) {
+			pr_err("%s: procfs cmd=%x error, len=%d",
+				__func__, dchdr->dtype, dchdr->dlen);
+			goto exit_free;
+		}
+		bp += sizeof(*dchdr);
+		len -= sizeof(*dchdr);
+		bp += dchdr->dlen;
+		len -= dchdr->dlen;
+		cnt++;
+	}
+	
+	if (len != 0) {
+		pr_err("%s: dcs_cmd=%x len=%d error!",__func__, buf[0], blen);
+		goto exit_free;
+	}
+
+	pcmds->cmds = kcalloc(cnt ,sizeof(struct dsi_cmd_desc),GFP_KERNEL);
+	if (!pcmds->cmds)
+		goto exit_free_cmds;		
+
+	pcmds->cmd_cnt = cnt;
+	pcmds->buf = buf;
+	pcmds->blen = blen;
+
+	bp = buf;
+	len = blen;
+	for (i = 0; i < cnt; i++) {
+		dchdr = (struct dsi_ctrl_hdr *)bp;
+		len -= sizeof(*dchdr);
+		bp += sizeof(*dchdr);
+		pcmds->cmds[i].dchdr = *dchdr;
+		pcmds->cmds[i].payload = bp;
+		bp += dchdr->dlen;
+	}
+	
+	//Set default link state to LP Mode
+	pcmds->link_state = DSI_LP_MODE;
+	
+	pr_info("%s: dcs_cmd=%x len=%d, cmd_cnt=%d link_state=%d\n", __func__,
+		pcmds->buf[0], pcmds->blen, pcmds->cmd_cnt, pcmds->link_state);
+	
+	return 0;
+
+exit_free_cmds:
+	 kfree(pcmds->cmds);
+exit_free:
+	kfree(buf);
+	return -ENOMEM;
+}
+
+static int mdss_dsi_procfs_read(struct mdss_dsi_ctrl_pdata *ctrl,
+			struct dsi_panel_cmds *pcmds, int rlen)
+{
+	int rc = 1,i = 0 ;
+	char *ptr = NULL;
+	struct dcs_cmd_req cmdreq;
+
+	if ( !rlen ) {
+		pr_err("invalid dsi read params!\n");
+		return -EINVAL;
+	}
+
+	ptr = kzalloc(rlen+1, GFP_KERNEL);
+	if (!ptr)
+		return -ENOMEM;
+
+	memset(&cmdreq, 0, sizeof(cmdreq));
+	cmdreq.cmds = pcmds->cmds;
+	cmdreq.cmds_cnt = 1;
+	cmdreq.flags = CMD_REQ_COMMIT | CMD_REQ_RX;
+	cmdreq.rlen = rlen+1;
+	cmdreq.cb = NULL;
+	cmdreq.rbuf =ptr;
+
+	if (pcmds->link_state == DSI_LP_MODE)
+		cmdreq.flags  |= CMD_REQ_LP_MODE;
+	else if (pcmds->link_state == DSI_HS_MODE)
+		cmdreq.flags |= CMD_REQ_HS_MODE;
+
+	rc = mdss_dsi_cmdlist_put(ctrl, &cmdreq);
+	if (rc <= 0) {
+		if (!mdss_dsi_sync_wait_enable(ctrl) ||
+			mdss_dsi_sync_wait_trigger(ctrl))
+		pr_err("%s: get reg: fail\n", __func__);
+		kfree(ptr);
+		return rc;
+	}
+
+	if(mipi_data_len !=  0 ){
+		memset(rbuf , 0, SZ_256);
+		kfree(rbuf);
+	}
+		
+	rbuf = kzalloc(SZ_256, GFP_KERNEL);
+	if (!rbuf)
+		return -ENOMEM;
+	memset(rbuf , 0, SZ_256);
+	mipi_data_len = 0;
+	
+	for(i = 0; i < rlen;i++){
+		pr_info("swb.%s.ptr[%d] = 0x%02x\n",__func__,i,ptr[i]);
+		if( i == ( rlen -1) )
+			mipi_data_len += snprintf(rbuf + mipi_data_len, SZ_256 - mipi_data_len,
+						   "0x%02x\n", ptr[i]);
+		else	  
+		        mipi_data_len += snprintf(rbuf + mipi_data_len, SZ_256 - mipi_data_len,
+							 "0x%02x ", ptr[i]);
+	}
+
+	kfree(ptr);
+	return rc;
+}
+
+ssize_t mipi_reg_rw(char *buf, size_t count)
+{
+	int retval = 0, dlen = 0;//procfs_rorw = 0;
+	char *input = NULL, *data = NULL;
+	char pbuf[3] = {0};
+	int tmp_data = 0;
+	struct dsi_panel_cmds procfs_cmds;
+
+	if (panel_ctrl == NULL) {
+		pr_err("%s: Invalid input data\n", __func__);
+		return -EINVAL;
+	}
+
+	pr_info("[swb] panel start to write ! count = %ld\n",count);
+	
+	input = buf;
+	memcpy(pbuf, input, 2);
+	pbuf[2] = '\0';
+	retval = kstrtou32(pbuf, 10, &tmp_data);
+	if (retval)
+		goto exit_unlock;
+	
+	pr_info("tmp_data = %d\n",tmp_data);
+	
+	input = input + 3;
+	data = kzalloc(count - 3, GFP_KERNEL);
+	if (!data) {
+		retval = -ENOMEM;
+		goto exit_unlock;
+	}
+	
+	data[count-3-1] = '\0';
+
+	dlen = string_merge_into_buf(input, count-3, data);
+	if (dlen <= 0)
+		goto exit_free1;
+
+	memset(&procfs_cmds, 0, sizeof(procfs_cmds));
+	
+	retval = mdss_dsi_parse_procfs_cmds(&procfs_cmds,data,dlen);
+	if(retval < 0){
+		pr_info("swb.mdss_dsi_parse_procfs_cmds parse procfs adb cmd fail\n");
+	}
+
+	/*The first parameter indicate procfs to read or write*/
+	switch (data[0]) {
+		case DTYPE_GEN_WRITE:
+		case DTYPE_GEN_WRITE1:
+		case DTYPE_GEN_WRITE2:
+		case DTYPE_GEN_LWRITE:			
+		case DTYPE_DCS_LWRITE:
+		case DTYPE_DCS_WRITE:
+		case DTYPE_DCS_WRITE1:
+			if (procfs_cmds.cmd_cnt)
+				mdss_dsi_panel_cmds_send(panel_ctrl, &procfs_cmds, CMD_REQ_COMMIT);
+			retval = count;
+			break;
+		case DTYPE_GEN_READ:
+		case DTYPE_GEN_READ1:
+		case DTYPE_GEN_READ2:
+		case DTYPE_DCS_READ:
+			if (procfs_cmds.cmd_cnt){
+				retval = mdss_dsi_procfs_read( panel_ctrl, &procfs_cmds, tmp_data);
+				if (retval <= 0) {
+					pr_err("%s: DSI read: fail\n", __func__);
+				}
+				retval = count;
+			}
+			break;
+		default:
+			pr_err("%s: dtype=0x%02x NOT supported\n",
+						__func__, data[0]);
+			retval = -EINVAL;
+			break;
+	}
+
+	kfree(procfs_cmds.cmds);
+	kfree(procfs_cmds.buf);
+	
+exit_free1:
+	kfree(data);
+exit_unlock:
+	return retval;
+}
+
+static ssize_t mipi_reg_procfs_show(struct file *file, char __user *page,
+				    size_t count, loff_t *ppos)
+{	
+	size_t data_len = 0;
+
+	if (*ppos ||!mipi_data_len )
+	      return 0;
+	
+	data_len =  mipi_data_len;
+
+	if (copy_to_user(page, rbuf, data_len)) {
+		kfree(rbuf);
+		return -EFAULT;
+	}
+	
+	*ppos += data_len;
+	mipi_data_len = 0;
+	kfree(rbuf);
+	return data_len;
+}
+
+static ssize_t mipi_reg_procfs_write(struct file *file, const char __user *buf,
+	size_t count, loff_t *offp)
+{
+	int retval = 0;
+	char *input = NULL;
+
+	input = kmalloc(count, GFP_KERNEL);
+	if (!input) {
+		return -ENOMEM;
+	}
+	if (copy_from_user(input, buf, count)) {
+		pr_err("copy from user failed\n");
+		retval = -EFAULT;
+		goto end;
+	}
+	input[count-1] = '\0';
+	retval = mipi_reg_rw(input, count);
+end:
+	kfree(input);
+	return retval;
+}
+
+const struct file_operations mipi_reg_proc_fops = {
+	.owner   = THIS_MODULE,
+	.write   = mipi_reg_procfs_write,
+	.read    = mipi_reg_procfs_show,
+};
+#endif
+//- Mtr4809, shenwenbin.wt, add, 20210126, add proc interface of mdss fb for adb rw panel reg 
+
 int mdss_dsi_panel_init(struct device_node *node,
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata,
 	int ndx)
@@ -2994,6 +3553,9 @@ int mdss_dsi_panel_init(struct device_node *node,
 	} else {
 		pr_info("%s: Panel Name = %s\n", __func__, panel_name);
 		strlcpy(&pinfo->panel_name[0], panel_name, MDSS_MAX_PANEL_LEN);
+		//+bug 600732, wangcong.wt, add, 2020/11/23, Add lcd name in boardinfo
+		strlcpy(Lcm_name, panel_name, HARDWARE_MAX_ITEM_LONGTH);
+		//-bug 600732, wangcong.wt, add, 2020/11/23, Add lcd name in boardinfo
 	}
 	rc = mdss_panel_parse_dt(node, ctrl_pdata);
 	if (rc) {
@@ -3015,5 +3577,15 @@ int mdss_dsi_panel_init(struct device_node *node,
 			mdss_dsi_panel_apply_display_setting;
 	ctrl_pdata->switch_mode = mdss_dsi_panel_switch_mode;
 	ctrl_pdata->panel_data.get_idle = mdss_dsi_panel_get_idle_mode;
+
+//+ Mtr4809, shenwenbin.wt, add, 20210126, add proc interface of mdss fb for adb rw panel reg 
+#ifdef CONFIG_DSI_READ_WRITE_PANEL_DEBUG
+	panel_ctrl = ctrl_pdata;
+	mipi_proc_entry = proc_create(MIPI_PROC_NAME, 0664, NULL, &mipi_reg_proc_fops);
+	if (!mipi_proc_entry)
+		printk(KERN_WARNING "mipi_reg: unable to create proc entry.\n");
+#endif
+//- Mtr4809, shenwenbin.wt, add, 20210126, add proc interface of mdss fb for adb rw panel reg 
+
 	return 0;
 }

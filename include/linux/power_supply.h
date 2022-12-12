@@ -47,6 +47,8 @@ enum {
 	POWER_SUPPLY_CHARGE_TYPE_TRICKLE,
 	POWER_SUPPLY_CHARGE_TYPE_FAST,
 	POWER_SUPPLY_CHARGE_TYPE_TAPER,
+	//Bug 600732,xushengjuan.wt,modify,20201118,S86117,add new_charge_type node
+	POWER_SUPPLY_CHARGE_TYPE_SLOW,
 };
 
 enum {
@@ -303,6 +305,30 @@ enum power_supply_property {
 	POWER_SUPPLY_PROP_SOH,
 	POWER_SUPPLY_PROP_QC_OPTI_DISABLE,
 	POWER_SUPPLY_PROP_FCC_STEPPER_ENABLE,
+	//+Bug601084, yangpingao.wt, modify, 2020/11/17, P81081 charger bring up, Stopchg/Startchg
+	POWER_SUPPLY_PROP_STOPCHARGING_TEST,
+	POWER_SUPPLY_PROP_STARTCHARGING_TEST,
+	//-Bug601084, yangpingao.wt, modify, 2020/11/17, P81081 charger bring up, Stopchg/Startchg
+	POWER_SUPPLY_PROP_STORE_MODE,
+	//+Bug 600732,xushengjuan.wt,modify,20201118,S86117,add node
+	POWER_SUPPLY_PROP_HV_CHARGER_STATUS,
+	POWER_SUPPLY_PROP_BATT_CURRENT_EVENT,
+	POWER_SUPPLY_PROP_BATT_SLATE_MODE,
+	//Bug 439628 caijiaqi.wt,MODIFIY,20190423,modifiy node name batt_mise_event to batt_misc_event
+	POWER_SUPPLY_PROP_BATT_MISC_EVENT,
+	//-Bug 437373 caijiaqi.wt, ADD,20190409,P81081 add battery node for customer
+	//Bug 437837 caijiaqi.wt,MODIFIY,20190411,P81081 add new_charge_type node
+	POWER_SUPPLY_PROP_NEW_CHARGE_TYPE,
+	//Bug 437997 caijiaqi.wt,MODIFIY,20190412,P81081 add batt_current_ua_now node
+	POWER_SUPPLY_PROP_BATT_CURRENT_UA_NOW,
+	//+Bug 600732,xushengjuan.wt,modify,20201118,S86117,add node
+	//+ SS_charging, add battery_cycle node
+	POWER_SUPPLY_PROP_BATTERY_CYCLE,
+	//- SS_charging, add battery_cycle node
+#if defined(CONFIG_AFC)
+	POWER_SUPPLY_PROP_AFC_RESULT,
+	POWER_SUPPLY_PROP_HV_DISABLE,
+#endif
 	POWER_SUPPLY_PROP_CC_SOC,
 	POWER_SUPPLY_PROP_QG_VBMS_MODE,
 	POWER_SUPPLY_PROP_REAL_CAPACITY,
@@ -337,6 +363,11 @@ enum power_supply_type {
 	POWER_SUPPLY_TYPE_TYPEC,	/* Type-C */
 	POWER_SUPPLY_TYPE_UFP,		/* Type-C UFP */
 	POWER_SUPPLY_TYPE_DFP,		/* TYpe-C DFP */
+	//Bug 600732,xushengjuan.wt,modify,20201118,S86117,add otg node
+	POWER_SUPPLY_TYPE_USB_OTG,	/* USB OTG */
+#if defined(CONFIG_AFC)
+	POWER_SUPPLY_TYPE_AFC,
+#endif
 };
 
 /* Indicates USB Type-C CC connection status */
@@ -366,6 +397,10 @@ enum power_supply_typec_power_role {
 
 enum power_supply_notifier_events {
 	PSY_EVENT_PROP_CHANGED,
+//+Bug 601075   ,xuyanan.wt,20201118,add,sar sensor bringup
+	PSY_EVENT_PROP_ADDED,  
+	PSY_EVENT_PROP_REMOVED,
+//-Bug 601075  ,xuyanan.wt,20201118,add,sar sensor bringup
 };
 
 union power_supply_propval {
@@ -425,9 +460,10 @@ struct power_supply_desc {
 	/* For APM emulation, think legacy userspace. */
 	int use_for_apm;
 };
-
+//+Bug 601075   ,xuyanan.wt,20201118,add,sar sensor bringup
 struct power_supply {
 	const struct power_supply_desc *desc;
+	const char *name; 
 
 	char **supplied_to;
 	size_t num_supplicants;
@@ -436,6 +472,22 @@ struct power_supply {
 	size_t num_supplies;
 	struct device_node *of_node;
 
+//+Bug 603959, liangxiaoqin.wt, 20201216, add, add usb_notify node,start
+#ifdef CONFIG_USB_NOTIFIER
+	int usb_host_flag;
+#endif
+//-Bug 603959, liangxiaoqin.wt, 20201216, add, add usb_notify node,end
+
+	/*
+	 * Functions for drivers implementing power supply class.
+	 * These shouldn't be called directly by other drivers for accessing
+	 * this power supply. Instead use power_supply_*() functions (for
+	 * example power_supply_get_property()).
+	 */
+	int (*get_property)(struct power_supply *psy,
+			    enum power_supply_property psp,
+			    union power_supply_propval *val);
+//-Bug 601075   ,xuyanan.wt,20201118,add,sar sensor bringup
 	/* Driver private data */
 	void *drv_data;
 

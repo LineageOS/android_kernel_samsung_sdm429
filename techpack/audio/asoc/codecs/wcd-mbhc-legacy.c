@@ -33,6 +33,148 @@
 static int det_extn_cable_en;
 module_param(det_extn_cable_en, int, 0664);
 MODULE_PARM_DESC(det_extn_cable_en, "enable/disable extn cable detect");
+//+Bug 603257, zhouweijie.wt, add , 20201130, add for mbhc adc detect
+#ifdef  CONFIG_ARCH_MSM8953
+int adc_hph_en;
+module_param(adc_hph_en, int, 0664);
+MODULE_PARM_DESC(adc_hph_en, "enable/disable adc headphones");
+EXPORT_SYMBOL(adc_hph_en);
+
+//copy form msm-analog-cdc.c, must change together
+#ifdef  CONFIG_ARCH_MSM8953
+int adc_hph_en = 1;
+#endif
+#define MICBIAS_DEFAULT_MV 2400
+#define HS_THRESHOLD_MV ((MICBIAS_DEFAULT_MV * 1700) / 1800)
+#define HPH_THRESHOLD_MV 75
+#define ADC_CNT_MAX 5
+
+static int qpnp_adc_read_mv(struct wcd_mbhc *mbhc)
+{
+	struct wcd_mbhc_config *mbhc_cfg = NULL;
+	struct qpnp_vadc_result result = {0};
+	int rc = 0;
+
+	if (mbhc)
+		mbhc_cfg = mbhc->mbhc_cfg;
+
+	if (mbhc_cfg && mbhc_cfg->vadc_dev) {
+		rc = qpnp_vadc_read(mbhc_cfg->vadc_dev, mbhc_cfg->adc_channel, &result);
+		printk("%s:rc %d, %lld mV\n", __func__, rc, result.physical / 1000);
+	}
+
+	return (rc < 0) ? 0 : (result.physical / 1000);
+}
+
+static int wcd_mbhc_get_plug_by_adc(int adc_result)
+
+{
+	enum wcd_mbhc_plug_type plug_type = MBHC_PLUG_TYPE_INVALID;
+	u32 hph_thr = 0, hs_thr = 0;
+
+	hs_thr = HS_THRESHOLD_MV;
+
+	hph_thr = HPH_THRESHOLD_MV;
+
+	if (adc_result < hph_thr)
+		plug_type = MBHC_PLUG_TYPE_HEADPHONE;
+	else if (adc_result > hs_thr)
+		plug_type = MBHC_PLUG_TYPE_HIGH_HPH;
+	else
+		plug_type = MBHC_PLUG_TYPE_HEADSET;
+	printk("%s: plug type is %d found, adc_result %d, hs_thr %d\n",
+							__func__, plug_type,adc_result, hs_thr);
+
+	return plug_type;
+}
+
+static int wcd_mbhc_hs_comp_result(struct wcd_mbhc *mbhc)
+{
+	int hs_comp = 0;
+	int adc_mv = 0;
+	int hs_thr = HS_THRESHOLD_MV;
+
+	adc_mv = qpnp_adc_read_mv(mbhc);
+
+	if (adc_mv > hs_thr)
+		hs_comp = 1;
+
+	return hs_comp;
+}
+#endif
+//-Bug 603257, zhouweijie.wt, add , 20201130, add for mbhc adc detect
+
+/* +Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
+#ifdef  CONFIG_ARCH_MSM8937
+int adc_hph_en;
+module_param(adc_hph_en, int, 0664);
+MODULE_PARM_DESC(adc_hph_en, "enable/disable adc headphones");
+EXPORT_SYMBOL(adc_hph_en);
+
+#ifdef CONFIG_SND_SOC_AW87319
+int adc_hph_en = 1;
+#endif
+
+//copy form msm-analog-cdc.c, must change together
+#define MICBIAS_DEFAULT_MV 2400
+#define HS_THRESHOLD_MV ((MICBIAS_DEFAULT_MV * 1700) / 1800)
+#define HPH_THRESHOLD_MV 75
+#define ADC_CNT_MAX 5
+
+static int qpnp_adc_read_mv(struct wcd_mbhc *mbhc)
+{
+    struct wcd_mbhc_config *mbhc_cfg = NULL;
+    struct qpnp_vadc_result result = {0};
+    int rc = 0;
+
+    if (mbhc)
+        mbhc_cfg = mbhc->mbhc_cfg;
+
+    if (mbhc_cfg && mbhc_cfg->vadc_dev) {
+        rc = qpnp_vadc_read(mbhc_cfg->vadc_dev, mbhc_cfg->adc_channel, &result);
+        printk("%s:rc %d, %lld mV\n", __func__, rc, result.physical / 1000);
+    }
+
+    return (rc < 0) ? 0 : (result.physical / 1000);
+}
+
+static int wcd_mbhc_get_plug_by_adc(int adc_result)
+
+{
+    enum wcd_mbhc_plug_type plug_type = MBHC_PLUG_TYPE_INVALID;
+    u32 hph_thr = 0, hs_thr = 0;
+
+    hs_thr = HS_THRESHOLD_MV;
+
+    hph_thr = HPH_THRESHOLD_MV;
+
+    if (adc_result < hph_thr)
+        plug_type = MBHC_PLUG_TYPE_HEADPHONE;
+    else if (adc_result > hs_thr)
+        plug_type = MBHC_PLUG_TYPE_HIGH_HPH;
+    else
+        plug_type = MBHC_PLUG_TYPE_HEADSET;
+    printk("%s: plug type is %d found, adc_result %d, hs_thr %d, hph_thr %d\n",
+            __func__, plug_type,adc_result, hs_thr, hph_thr);
+
+    return plug_type;
+}
+
+static int wcd_mbhc_hs_comp_result(struct wcd_mbhc *mbhc)
+{
+    int hs_comp = 0;
+    int adc_mv = 0;
+    int hs_thr = HS_THRESHOLD_MV;
+
+    adc_mv = qpnp_adc_read_mv(mbhc);
+
+    if (adc_mv > hs_thr)
+        hs_comp = 1;
+
+    return hs_comp;
+}
+#endif
+/* -Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
 
 static bool wcd_mbhc_detect_anc_plug_type(struct wcd_mbhc *mbhc)
 {
@@ -452,6 +594,18 @@ static void wcd_correct_swch_plug(struct work_struct *work)
 	int rc, spl_hs_count = 0;
 	int cross_conn;
 	int try = 0;
+//+Bug 603257, zhouweijie.wt, add , 20201130, add for mbhc adc detect
+#ifdef  CONFIG_ARCH_MSM8953
+	int output_mv = 0;
+	int adc_try = 0;
+#endif
+//-Bug 603257, zhouweijie.wt, add , 20201130, add for mbhc adc detect
+/* +Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
+#ifdef  CONFIG_ARCH_MSM8937
+    int output_mv = 0;
+    int adc_try = 0;
+#endif
+/* -Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
 
 	pr_debug("%s: enter\n", __func__);
 
@@ -474,6 +628,11 @@ static void wcd_correct_swch_plug(struct work_struct *work)
 	 * Check for any button press interrupts before starting 3-sec
 	 * loop.
 	 */
+#ifdef  CONFIG_ARCH_MSM8953
+if (!adc_hph_en) {
+#elif defined CONFIG_ARCH_MSM8937
+if (!adc_hph_en) {
+#endif
 	rc = wait_for_completion_timeout(&mbhc->btn_press_compl,
 			msecs_to_jiffies(WCD_MBHC_BTN_PRESS_COMPL_TIMEOUT_MS));
 
@@ -499,7 +658,16 @@ static void wcd_correct_swch_plug(struct work_struct *work)
 		cross_conn = wcd_check_cross_conn(mbhc);
 		try++;
 	} while (try < mbhc->swap_thr);
-
+#ifdef  CONFIG_ARCH_MSM8953
+	printk("%s: hs_comp %d, plug_type %d\n", __func__, hs_comp_res,
+				((cross_conn > 0) ? MBHC_PLUG_TYPE_GND_MIC_SWAP : plug_type));
+#endif
+/* +Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
+#ifdef  CONFIG_ARCH_MSM8937
+    printk("%s: hs_comp %d, plug_type %d\n", __func__, hs_comp_res,
+                ((cross_conn > 0) ? MBHC_PLUG_TYPE_GND_MIC_SWAP : plug_type));
+#endif
+/* -Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
 	/*
 	 * Check for cross connection 4 times.
 	 * Consider the result of the fourth iteration.
@@ -512,6 +680,26 @@ static void wcd_correct_swch_plug(struct work_struct *work)
 			 __func__, plug_type);
 		goto correct_plug_type;
 	}
+
+//+Bug 603257, zhouweijie.wt, add , 20201130, add for mbhc adc detect
+#ifdef  CONFIG_ARCH_MSM8953
+} else {
+	msleep(300);//delay 0.3s
+	output_mv = qpnp_adc_read_mv(mbhc);
+	plug_type = wcd_mbhc_get_plug_by_adc(output_mv);
+}
+#endif
+//-Bug 603257, zhouweijie.wt, add , 20201130, add for mbhc adc detect
+
+/* +Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
+#ifdef  CONFIG_ARCH_MSM8937
+} else {
+    msleep(300);//delay 0.3s
+    output_mv = qpnp_adc_read_mv(mbhc);
+    plug_type = wcd_mbhc_get_plug_by_adc(output_mv);
+}
+#endif
+/* -Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
 
 	if ((plug_type == MBHC_PLUG_TYPE_HEADSET ||
 	     plug_type == MBHC_PLUG_TYPE_HEADPHONE) &&
@@ -570,6 +758,46 @@ correct_plug_type:
 			}
 			goto exit;
 		}
+//+Bug 603257, zhouweijie.wt, add , 20201130,add for mbhc adc detect 
+#ifdef  CONFIG_ARCH_MSM8953
+if (adc_hph_en) {
+		msleep(500);
+		output_mv = qpnp_adc_read_mv(mbhc);
+		plug_type = wcd_mbhc_get_plug_by_adc(output_mv);
+		if (plug_type == MBHC_PLUG_TYPE_HEADSET) {
+			WCD_MBHC_RSC_LOCK(mbhc);
+			wcd_mbhc_find_plug_and_report(mbhc, plug_type);
+			WCD_MBHC_RSC_UNLOCK(mbhc);
+		}
+		if (plug_type == MBHC_PLUG_TYPE_HIGH_HPH)
+			wrk_complete = true;
+		else
+			wrk_complete = false;
+		if (++adc_try >= ADC_CNT_MAX)
+			break;
+} else {
+#endif
+//-Bug 603257, zhouweijie.wt, add , 20201130,add for mbhc adc detect
+/* +Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
+#ifdef  CONFIG_ARCH_MSM8937
+if (adc_hph_en) {
+        msleep(500);
+        output_mv = qpnp_adc_read_mv(mbhc);
+        plug_type = wcd_mbhc_get_plug_by_adc(output_mv);
+        if (plug_type == MBHC_PLUG_TYPE_HEADSET) {
+            WCD_MBHC_RSC_LOCK(mbhc);
+            wcd_mbhc_find_plug_and_report(mbhc, plug_type);
+            WCD_MBHC_RSC_UNLOCK(mbhc);
+        }
+        if (plug_type == MBHC_PLUG_TYPE_HIGH_HPH)
+            wrk_complete = true;
+        else
+            wrk_complete = false;
+        if (++adc_try >= ADC_CNT_MAX)
+            break;
+} else {
+#endif
+/* -Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
 		WCD_MBHC_REG_READ(WCD_MBHC_HS_COMP_RESULT, hs_comp_res);
 
 		pr_debug("%s: hs_comp_res: %x\n", __func__, hs_comp_res);
@@ -687,6 +915,18 @@ correct_plug_type:
 			wrk_complete = false;
 		}
 	}
+#ifdef  CONFIG_ARCH_MSM8953
+}
+	printk("%s: after 3s wrk_complete %d, plug_type %d\n", __func__,
+		wrk_complete, plug_type);
+#endif
+/* +Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
+#ifdef  CONFIG_ARCH_MSM8937
+}
+    printk("%s: after 3s wrk_complete %d, plug_type %d\n", __func__,
+        wrk_complete, plug_type);
+#endif
+/* -Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
 	if (!wrk_complete && mbhc->btn_press_intr) {
 		pr_debug("%s: Can be slow insertion of headphone\n", __func__);
 		wcd_cancel_btn_work(mbhc);
@@ -706,8 +946,16 @@ correct_plug_type:
 			 __func__, mbhc->current_plug);
 		goto enable_supply;
 	}
-
+//Bug 603257, zhouweijie.wt, add , 20201130,add for mbhc adc detect
+#ifdef  CONFIG_ARCH_MSM8953
+	if ((!adc_hph_en) && plug_type == MBHC_PLUG_TYPE_HIGH_HPH &&
+/* +Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
+#elif defined CONFIG_ARCH_MSM8937
+    if ((!adc_hph_en) && plug_type == MBHC_PLUG_TYPE_HIGH_HPH &&
+#else
+/* -Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
 	if (plug_type == MBHC_PLUG_TYPE_HIGH_HPH &&
+#endif
 		(!det_extn_cable_en)) {
 		if (wcd_is_special_headset(mbhc)) {
 			pr_debug("%s: Special headset found %d\n",
@@ -790,6 +1038,87 @@ exit:
 	mbhc->mbhc_cb->lock_sleep(mbhc, false);
 	pr_debug("%s: leave\n", __func__);
 }
+//+Bug 603257, zhouweijie.wt, add , 20201130, add for mbhc adc detect
+#ifdef  CONFIG_ARCH_MSM8953
+void wcd_mbhc_elec_detect_extn_cable(struct wcd_mbhc *mbhc)
+{
+	/* cancel pending button press */
+	if (wcd_cancel_btn_work(mbhc))
+		pr_debug("%s: button press is canceled\n", __func__);
+	/* cancel correct work function */
+	if (mbhc->mbhc_fn->wcd_cancel_hs_detect_plug)
+		mbhc->mbhc_fn->wcd_cancel_hs_detect_plug(mbhc,
+						&mbhc->correct_plug_swch);
+	else
+		pr_info("%s: hs_detect_plug work not cancelled\n", __func__);
+
+	wcd_mbhc_hs_elec_irq(mbhc, WCD_MBHC_ELEC_HS_REM, false);
+
+	if (mbhc->mbhc_cfg->detect_extn_cable) {
+		/* High impedance device found. Report as LINEOUT */
+		wcd_mbhc_report_plug(mbhc, 1, SND_JACK_LINEOUT);
+		pr_debug("%s: setup mic trigger for further detection\n",
+			 __func__);
+		wcd_mbhc_hs_elec_irq(mbhc, WCD_MBHC_ELEC_HS_REM, false);
+
+		/* Disable HW FSM and current source */
+		WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_FSM_EN, 0);
+		WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_BTN_ISRC_CTL, 0);
+		/* Setup for insertion detection */
+		WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_ELECT_DETECTION_TYPE, 1);
+		/*
+		 * Enable HPHL trigger and MIC Schmitt triggers
+		 * and request for elec insertion interrupts
+		 */
+		WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_ELECT_SCHMT_ISRC, 3);
+		wcd_mbhc_hs_elec_irq(mbhc, WCD_MBHC_ELEC_HS_INS, true);
+	} else {
+		wcd_mbhc_report_plug(mbhc, 1, SND_JACK_LINEOUT);
+	}
+}
+#endif
+//-Bug 603257, zhouweijie.wt, add , 20201130, add for mbhc adc detect
+
+/* +Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
+#ifdef  CONFIG_ARCH_MSM8937
+void wcd_mbhc_elec_detect_extn_cable(struct wcd_mbhc *mbhc)
+{
+    /* cancel pending button press */
+    if (wcd_cancel_btn_work(mbhc))
+        pr_debug("%s: button press is canceled\n", __func__);
+    /* cancel correct work function */
+    if (mbhc->mbhc_fn->wcd_cancel_hs_detect_plug)
+        mbhc->mbhc_fn->wcd_cancel_hs_detect_plug(mbhc,
+                &mbhc->correct_plug_swch);
+    else
+        pr_info("%s: hs_detect_plug work not cancelled\n", __func__);
+
+    wcd_mbhc_hs_elec_irq(mbhc, WCD_MBHC_ELEC_HS_REM, false);
+
+    if (mbhc->mbhc_cfg->detect_extn_cable) {
+        /* High impedance device found. Report as LINEOUT */
+        wcd_mbhc_report_plug(mbhc, 1, SND_JACK_LINEOUT);
+        pr_debug("%s: setup mic trigger for further detection\n",
+                __func__);
+        wcd_mbhc_hs_elec_irq(mbhc, WCD_MBHC_ELEC_HS_REM, false);
+
+        /* Disable HW FSM and current source */
+        WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_FSM_EN, 0);
+        WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_BTN_ISRC_CTL, 0);
+        /* Setup for insertion detection */
+        WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_ELECT_DETECTION_TYPE, 1);
+        /*
+         * Enable HPHL trigger and MIC Schmitt triggers
+         * and request for elec insertion interrupts
+         */
+        WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_ELECT_SCHMT_ISRC, 3);
+        wcd_mbhc_hs_elec_irq(mbhc, WCD_MBHC_ELEC_HS_INS, true);
+    } else {
+        wcd_mbhc_report_plug(mbhc, 1, SND_JACK_LINEOUT);
+    }
+}
+#endif
+/* -Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
 
 static irqreturn_t wcd_mbhc_hs_rem_irq(int irq, void *data)
 {
@@ -806,7 +1135,13 @@ static irqreturn_t wcd_mbhc_hs_rem_irq(int irq, void *data)
 	pr_debug("%s: enter\n", __func__);
 
 	WCD_MBHC_RSC_LOCK(mbhc);
-
+#ifdef  CONFIG_ARCH_MSM8953
+if (!adc_hph_en) {
+/* +Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
+#elif defined CONFIG_ARCH_MSM8937
+    if (!adc_hph_en) {
+/* -Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
+#endif
 	timeout = jiffies +
 		  msecs_to_jiffies(WCD_FAKE_REMOVAL_MIN_PERIOD_MS);
 	do {
@@ -826,12 +1161,52 @@ static irqreturn_t wcd_mbhc_hs_rem_irq(int irq, void *data)
 		}
 	} while (!time_after(jiffies, timeout));
 
+//+Bug 603257, zhouweijie.wt, add , 20201130, add for mbhc adc detect
+#ifdef  CONFIG_ARCH_MSM8953
+} else {
+	msleep(300);
+	while (retry++ < FAKE_REM_RETRY_ATTEMPTS) {
+		msleep(50);
+		hs_comp_result = wcd_mbhc_hs_comp_result(mbhc);
+	}
+	if (!hs_comp_result)
+		removed = false;
+}
+#endif
+//+Bug 603257, zhouweijie.wt, add , 20201130, add for mbhc adc detect
+/* +Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
+#ifdef  CONFIG_ARCH_MSM8937
+    } else {
+        msleep(300);
+        while (retry++ < FAKE_REM_RETRY_ATTEMPTS) {
+            msleep(50);
+            hs_comp_result = wcd_mbhc_hs_comp_result(mbhc);
+        }
+        if (!hs_comp_result)
+            removed = false;
+    }
+#endif
+/* -Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
 	if (wcd_swch_level_remove(mbhc)) {
 		pr_debug("%s: Switch level is low ", __func__);
 		goto exit;
 	}
 	pr_debug("%s: headset %s actually removed\n", __func__,
 		removed ? "" : "not ");
+
+//+Bug 603257, zhouweijie.wt, add , 20201130, add for mbhc adc detect
+#ifdef  CONFIG_ARCH_MSM8953
+	if (adc_hph_en && hs_comp_result)
+		goto report_unplug;
+#endif
+//-Bug 603257, zhouweijie.wt, add , 20201130, add for mbhc adc detect
+
+/* +Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
+#ifdef  CONFIG_ARCH_MSM8937
+    if (adc_hph_en && hs_comp_result)
+        goto report_unplug;
+#endif
+/* -Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
 
 	WCD_MBHC_REG_READ(WCD_MBHC_HPHL_SCHMT_RESULT, hphl_sch);
 	WCD_MBHC_REG_READ(WCD_MBHC_MIC_SCHMT_RESULT, mic_sch);
@@ -919,7 +1294,25 @@ exit:
 	return IRQ_HANDLED;
 
 report_unplug:
-	wcd_mbhc_elec_hs_report_unplug(mbhc);
+//+Bug 603257, zhouweijie.wt, add , 20201130,add for mbhc adc detect
+#ifdef  CONFIG_ARCH_MSM8953
+	if (!adc_hph_en)
+		wcd_mbhc_elec_hs_report_unplug(mbhc);
+	else
+		wcd_mbhc_elec_detect_extn_cable(mbhc);
+/* +Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
+#elif defined CONFIG_ARCH_MSM8937
+    if (!adc_hph_en)
+        wcd_mbhc_elec_hs_report_unplug(mbhc);
+    else
+        wcd_mbhc_elec_detect_extn_cable(mbhc);
+#else
+/* -Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
+		wcd_mbhc_elec_hs_report_unplug(mbhc);
+#endif
+//-Bug 603257, zhouweijie.wt, add , 20201130,add for mbhc adc detect
+
+
 	if (hphpa_on) {
 		hphpa_on = false;
 		WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_HPHL_PA_EN, 1);
@@ -939,7 +1332,15 @@ static irqreturn_t wcd_mbhc_hs_ins_irq(int irq, void *data)
 	u16 elect_result = 0;
 	static u16 hphl_trigerred;
 	static u16 mic_trigerred;
-
+//Bug 603257, zhouweijie.wt, add , 20201130, add for mbhc adc detect
+#ifdef  CONFIG_ARCH_MSM8953
+	int hs_comp_res = 0, retry = 0;
+#endif
+/* +Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
+#ifdef  CONFIG_ARCH_MSM8937
+    int hs_comp_res = 0, retry = 0;
+#endif
+/* -Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
 	pr_debug("%s: enter\n", __func__);
 	if (!mbhc->mbhc_cfg->detect_extn_cable) {
 		pr_debug("%s: Returning as Extension cable feature not enabled\n",
@@ -947,7 +1348,14 @@ static irqreturn_t wcd_mbhc_hs_ins_irq(int irq, void *data)
 		return IRQ_HANDLED;
 	}
 	WCD_MBHC_RSC_LOCK(mbhc);
-
+#ifdef  CONFIG_ARCH_MSM8953
+if (!adc_hph_en) {
+#endif
+/* +Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
+#ifdef  CONFIG_ARCH_MSM8937
+ if (!adc_hph_en) {
+#endif
+/* -Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
 	WCD_MBHC_REG_READ(WCD_MBHC_ELECT_DETECTION_TYPE, detection_type);
 	WCD_MBHC_REG_READ(WCD_MBHC_ELECT_RESULT, elect_result);
 
@@ -992,6 +1400,45 @@ static irqreturn_t wcd_mbhc_hs_ins_irq(int irq, void *data)
 	WCD_MBHC_RSC_UNLOCK(mbhc);
 	pr_debug("%s: leave\n", __func__);
 	return IRQ_HANDLED;
+//+Bug 603257, zhouweijie.wt,add, 20201130,add for mbhc adc detect
+#ifdef  CONFIG_ARCH_MSM8953
+} else {
+	wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_MB);
+	msleep(300);
+	while (++retry < ADC_CNT_MAX) {//300+50*4 = 500ms
+		msleep(50);
+		hs_comp_res = wcd_mbhc_hs_comp_result(mbhc);
+	}
+	if (!hs_comp_res)
+		goto determine_plug;
+	else
+		wcd_mbhc_elec_detect_extn_cable(mbhc);
+	WCD_MBHC_RSC_UNLOCK(mbhc);
+	pr_debug("%s: leave\n", __func__);
+	return IRQ_HANDLED;
+}
+#endif
+//-Bug 603257, zhouweijie.wt,add, 20201130,add for mbhc adc detect
+/* -Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
+#ifdef  CONFIG_ARCH_MSM8937
+ } else {
+     wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_MB);
+     msleep(300);
+     while (++retry < ADC_CNT_MAX) {//300+50*4 = 500ms
+         msleep(50);
+         hs_comp_res = wcd_mbhc_hs_comp_result(mbhc);
+     }
+     if (!hs_comp_res)
+         goto determine_plug;
+     else
+         wcd_mbhc_elec_detect_extn_cable(mbhc);
+     WCD_MBHC_RSC_UNLOCK(mbhc);
+     pr_debug("%s: leave\n", __func__);
+     return IRQ_HANDLED;
+     //Bug 539830, tangliang1@wingtech.com, 20200318, add for mbhc adc detect end
+}
+#endif
+/* -Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
 
 determine_plug:
 	/*

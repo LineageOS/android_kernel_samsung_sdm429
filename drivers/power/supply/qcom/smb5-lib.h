@@ -20,6 +20,12 @@
 #include <linux/extcon.h>
 #include <linux/alarmtimer.h>
 #include "storm-watch.h"
+#if defined(CONFIG_BATT_CISD)
+#include "batt-cisd.h"
+#endif
+#if defined(CONFIG_TYPEC)
+#include <linux/usb/typec.h>
+#endif
 
 enum print_reason {
 	PR_INTERRUPT	= BIT(0),
@@ -72,8 +78,32 @@ enum print_reason {
 #define MOISTURE_VOTER			"MOISTURE_VOTER"
 #define USBOV_DBC_VOTER			"USBOV_DBC_VOTER"
 #define FCC_STEPPER_VOTER		"FCC_STEPPER_VOTER"
+//+Bug 600732,xushengjuan.wt,modify,20201118,S86117,charger bring up
+//Bug 427130 caijiaqi.wt,ADD,20190121,P81081 charger bring up, add debug log
+#define CHG_INSERT_VOTER			"CHG_INSERT_VOTER"
 #define CHG_TERMINATION_VOTER		"CHG_TERMINATION_VOTER"
+//+Bug 455539 gudi.wt, MODIFY, 20190806,s86119 control charging current in lcd on or off
+#ifdef CONFIG_ARCH_MSM8953
+#define BATT_TEMP_VOTER                "BATT_TEMP_VOTER"
+#endif
+//-Bug 455539 gudi.wt, MODIFY, 20190806,s86119 control charging current in lcd on or off
+#if defined(CONFIG_AFC)
+#define SEC_BATTERY_AFC_VOTER		"SEC_BATTERY_AFC_VOTER"
+#define SEC_BATTERY_DISABLE_HV_VOTER	"SEC_BATTERY_DISABLE_HV_VOTER"
+#endif
 
+//+Bug 450044 caijiaqi.wt,MODIFIY,20190603,P81081 modifiy ato version control capacity max is 80%
+#ifdef WT_COMPILE_FACTORY_VERSION
+#define FACTORY_VOTER   "STORE_FACTOR_VOTER"
+#endif
+//-Bug 450044 caijiaqi.wt,MODIFIY,20190603,P81081 modifiy ato version control capacity max is 80%
+
+#ifdef CONFIG_ARCH_MSM8953
+//+Bug 465111 gudi.wtMODIFY,20190814,s86119 for accurate temp to limit current
+#define POWER_OFF_FCC_VOTER "POWER_OFF_FCC_VOTER"
+//+Bug 465111 gudi.wtMODIFY,20190814,s86119 for accurate temp to limit current
+#endif
+//-Bug 600732,xushengjuan.wt,modify,20201118,S86117,charger bring up
 #define BOOST_BACK_STORM_COUNT	3
 #define WEAK_CHG_STORM_COUNT	8
 
@@ -81,13 +111,63 @@ enum print_reason {
 
 #define SDP_100_MA			100000
 #define SDP_CURRENT_UA			500000
-#define CDP_CURRENT_UA			1500000
+//+Bug 600732,xushengjuan.wt,modify,20201118,S86117,charger bring up
+//+Bug 427130 caijiaqi.wt,MODIFIY,20190121,P81081 charger bring up
+#define CDP_CURRENT_UA			900000
+#define FLOAT_CURRENT_UA		900000
+//+Bug 439935 gudi.wt,MODIFIY,20190628,S86119AA1 charge current set 2.0A max ,hardware support for bring up
+#ifdef CONFIG_ARCH_MSM8953
+//+Bug 439935 gudi.wt,MODIFIY,20190719,S86119 DCP_CURRENT_UA set 1.8A max for DCP from customer requirements
+#define DCP_CURRENT_UA                  1800000
+//-Bug 439935 gudi.wt,MODIFIY,20190719,S86119 DCP_CURRENT_UA set 1.8A max for DCP from customer requirements
+#else
+
 #define DCP_CURRENT_UA			1500000
-#define HVDCP_CURRENT_UA		3000000
+#endif
+//-Bug 439935 gudi.wt,MODIFIY,20190628,S86119AA1 charge current set 2.0A max ,hardware support for bring up
+#if defined(CONFIG_AFC)
+#define AFC_CURRENT_UA			1650000
+#endif
+//+Bug 427130 caijiaqi.wt,MODIFIY,20190121,P81081 charger bring up
+//Bug 455539 caijiaqi.wt,MODIFIY,20190705,S86119 Modifiy open hvdcp for QC20
+//Bug 455539 caijiaqi.wt,MODIFIY,20190705,S86119 Modifiy open hvdcp for QC20
+#define HVDCP_CURRENT_UA                1650000
 #define TYPEC_DEFAULT_CURRENT_UA	900000
 #define TYPEC_MEDIUM_CURRENT_UA		1500000
-#define TYPEC_HIGH_CURRENT_UA		3000000
+//+Bug 455539 gudi.wt,MODIFIY,20190719,S86119 Modifiy open hvdcp for pd charger
+#ifdef CONFIG_ARCH_MSM8953
+#define TYPEC_HIGH_CURRENT_UA           1800000
+#else
+#define TYPEC_HIGH_CURRENT_UA           3000000
+#endif
+//-Bug 455539 gudi.wt,MODIFIY,20190719,S86119 Modifiy open hvdcp for pd charger
+//+Bug 437351 caijiaqi.wt,MODIFIY,20190409,P81081 add battery online node
+#define	BATTERY_ONLINE_INCOMPATIBLE_CHARGER	0
+#define	BATTERY_ONLINE_NONE	1
+#define	BATTERY_ONLINE_TA	3
+#define	BATTERY_ONLINE_USB	4
+#define	BATTERY_ONLINE_WIRELESS_CHARGER	10
+#define	BATTERY_ONLINE_POGO	23
+//Bug 472563 caijiaqi.wt,MODIFIY,20190823,S86119 add battery online node about PD
+#define BATTERY_ONLINE_PD_DCP			44
+#define	BATTERY_ONLINE_FAST_WIRELESS_CHARGER	100
+//-Bug 437351 caijiaqi.wt,MODIFIY,20190409,P81081 add battery online node
 
+//+Bug 437373 caijiaqi.wt, ADD,20190410,P81081 add battery node for customer
+#define SEC_BAT_CURRENT_EVENT_NONE	0x00000
+#define SEC_BAT_CURRENT_EVENT_AFC	0x00001
+#define SEC_BAT_CURRENT_EVENT_CHARGE_DISABLE		0x00002
+#define SEC_BAT_CURRENT_EVENT_SKIP_HEATING_CONTROL	0x00004
+#define SEC_BAT_CURRENT_EVENT_LOW_TEMP_SWELLING		0x00010
+#define SEC_BAT_CURRENT_EVENT_HIGH_TEMP_SWELLING	0x00020
+#define SEC_BAT_CURRENT_EVENT_USB_100MA	0x00040
+#define SEC_BAT_CURRENT_EVENT_SLATE	0x00800
+
+#define BATT_MISC_EVENT_UNDEFINED_RANGE_TYPE	0x00000001
+#define BATT_MISC_EVENT_TIMEOUT_OPEN_TYPE	0x00000004
+#define BATT_MISC_EVENT_HICCUP_TYPE		0x00000020
+//-Bug 437373 caijiaqi.wt, ADD,20190410,P81081 add battery node for customer
+//-Bug 600732,xushengjuan.wt,modify,20201118,S86117,charger bring up
 enum smb_mode {
 	PARALLEL_MASTER = 0,
 	PARALLEL_SLAVE,
@@ -100,11 +180,15 @@ enum sink_src_mode {
 	UNATTACHED_MODE,
 };
 
+//+Bug 600732,xushengjuan.wt,modify,20201118,S86117,(Patch)Handle QC2.0 charger collapse.
+#ifdef CONFIG_ARCH_MSM8953
 enum qc2_non_comp_voltage {
 	QC2_COMPLIANT,
 	QC2_NON_COMPLIANT_9V,
 	QC2_NON_COMPLIANT_12V
 };
+#endif
+//-Bug 600732,xushengjuan.wt,modify,20201118,S86117,(Patch)Handle QC2.0 charger collapse.
 
 enum {
 	BOOST_BACK_WA			= BIT(0),
@@ -312,6 +396,13 @@ struct smb_charger {
 	struct qpnp_vadc_chip	*vadc_dev;
 	bool			pd_not_supported;
 
+//+Bug 603959, liangxiaoqin.wt, 20201216, add, add usb_notify node,start
+#ifdef CONFIG_USB_NOTIFIER
+	bool			otg_block;
+	struct notifier_block	otg_nb;
+#endif
+//-Bug 603959, liangxiaoqin.wt, 20201216, add, add usb_notify node,end
+
 	/* locks */
 	struct mutex		lock;
 	struct mutex		ps_change_lock;
@@ -322,9 +413,15 @@ struct smb_charger {
 	struct power_supply		*usb_psy;
 	struct power_supply		*dc_psy;
 	struct power_supply		*bms_psy;
+	//Bug 600732,xushengjuan.wt,modify,20201118,S86117,add otg node
+	struct power_supply		*otg_psy;
 	struct power_supply		*usb_main_psy;
 	struct power_supply		*usb_port_psy;
 	enum power_supply_type		real_charger_type;
+
+#if defined(CONFIG_BATT_CISD)
+	struct cisd cisd;
+#endif
 
 	/* notifiers */
 	struct notifier_block	nb;
@@ -361,6 +458,15 @@ struct smb_charger {
 	struct delayed_work	uusb_otg_work;
 	struct delayed_work	bb_removal_work;
 	struct delayed_work	usbov_dbc_work;
+	//+Bug 600732,xushengjuan.wt,modify,20201118,S86117,charger bring up
+	//Bug 427130 caijiaqi.wt,ADD,20190121,P81081 charger bring up, add debug log
+	struct delayed_work	period_update_work;
+	//Bug 437373 caijiaqi.wt, ADD,20190410,P81081 add battery node for customer
+	struct delayed_work	usb_update_work;
+	//-Bug 600732,xushengjuan.wt,modify,20201118,S86117,charger bring up
+#if defined(CONFIG_AFC)
+	struct delayed_work    compliant_check_work;
+#endif
 
 	/* alarm */
 	struct alarm		moisture_protection_alarm;
@@ -384,7 +490,23 @@ struct smb_charger {
 	int			*thermal_mitigation;
 	int			dcp_icl_ua;
 	int			fake_capacity;
+//+Bug 600732,xushengjuan.wt,modify,20201118,S86117,charger bring up
+	//Bug 437318 caijiaqi.wt, ADD,20190409,P81081 add store_mode node to control capacity
+	int			store_mode;
+	//+Bug 437373 caijiaqi.wt, ADD,20190410,P81081 add battery node for customer
+	int			slate_mode;
+	int			usb_suspend_mode;
+	//-Bug 437373 caijiaqi.wt, ADD,20190410,P81081 add battery node for customer
+//+ SS_charging, add battery_cycle node
+	int			batt_cycle;
+//- SS_charging, add battery_cycle node
 	int			fake_batt_status;
+//+bug 452108 ,caijiaqi.wt,Modify,20190618,some device use AFC charger ,charger error
+#ifdef  CONFIG_ARCH_SDM429
+	bool			dcp_dpdm_flag;
+#endif
+//-bug 452108 ,caijiaqi.wt,Modify,20190618,some device use AFC charger ,charger error
+//-Bug 600732,xushengjuan.wt,modify,20201118,S86117,charger bring up
 	bool			step_chg_enabled;
 	bool			sw_jeita_enabled;
 	bool			is_hdc;
@@ -424,9 +546,15 @@ struct smb_charger {
 	/* workaround flag */
 	u32			wa_flags;
 	int			boost_current_ua;
-	bool			dbc_usbov;
-	int                     qc2_max_pulses;
+//+Bug 600732,xushengjuan.wt,modify,20201118,S86117,charger bring up
+//+Bug 455582,xujianbang.wt,Modify,20190706,(Patch)Handle QC2.0 charger collapse.
+#ifdef CONFIG_ARCH_MSM8953
+	int			qc2_max_pulses;
 	enum qc2_non_comp_voltage qc2_unsupported_voltage;
+#endif
+//-Bug 455582,xujianbang.wt,Modify,20190706,(Patch)Handle QC2.0 charger collapse.
+//-Bug 600732,xushengjuan.wt,modify,20201118,S86117,charger bring up
+	bool			dbc_usbov;
 
 	/* extcon for VBUS / ID notification to USB for uUSB */
 	struct extcon_dev	*extcon;
@@ -439,13 +567,45 @@ struct smb_charger {
 	int			pulse_cnt;
 
 	int			die_health;
+	//+Bug 600732,xushengjuan.wt,modify,20201118,S86117,charger bring up
+        //+Bug 455539 gudi.wt, MODIFY, 20190805,s86119 control charging current in lcd on or off
+        #ifdef CONFIG_ARCH_MSM8953
+        int                     last_bat_current;//bug 455539 gudi.wt, MODIFY, 20190717, control charging current in period update
+        #endif
+        //-Bug 455539 gudi.wt, MODIFY, 20190805,s86119 control charging current in lcd on or off
 
 	/* flash */
+	//+EXTB P190730-04079 caijiaqi.wt,add,20190815 Charging popup is coming  while camera with a flash
+	#ifdef CONFIG_ARCH_MSM8953
+	u32			old_charger_statue;
+	#endif
+	//-EXTB P190730-04079 caijiaqi.wt,add,20190815 Charging popup is coming  while camera with a flash
+	//-Bug 600732,xushengjuan.wt,modify,20201118,S86117,charger bring up
 	u32			flash_derating_soc;
 	u32			flash_disable_soc;
 	u32			headroom_mode;
 	bool			flash_init_done;
 	bool			flash_active;
+#if defined(CONFIG_AFC)
+	int			afc_sts;
+	bool			hv_disable;
+	struct delayed_work		flash_active_work;
+#endif
+#if defined(CONFIG_TYPEC)
+	struct typec_port 		*port;
+	struct typec_partner 	*partner;
+	struct usb_pd_identity 	partner_identity;
+	struct typec_capability 	typec_cap;
+	struct completion 		typec_reverse_completion;
+	int		typec_power_role;
+	int 	typec_data_role;
+	int 	typec_power_role_flag;
+	int 	typec_try_state_change;
+	int 	pwr_opmode;
+	int		requested_port_type;
+	struct delayed_work		role_reversal_check;
+	struct mutex			typec_lock;
+#endif
 };
 
 int smblib_read(struct smb_charger *chg, u16 addr, u8 *val);
@@ -602,7 +762,20 @@ int smblib_configure_wdog(struct smb_charger *chg, bool enable);
 int smblib_force_vbus_voltage(struct smb_charger *chg, u8 val);
 int smblib_configure_hvdcp_apsd(struct smb_charger *chg, bool enable);
 int smblib_icl_override(struct smb_charger *chg, bool override);
-
+//+Bug 600732,xushengjuan.wt,modify,20201118,S86117,charger bring up
+//+Bug 437318 caijiaqi.wt, ADD,20190409,P81081 add store_mode node to control capacity
+int smblib_get_prop_store_mode(struct smb_charger *chg,
+				union power_supply_propval *val);
+int smblib_set_prop_store_mode(struct smb_charger *chg,
+				const union power_supply_propval *val);
+//-Bug 437318 caijiaqi.wt, ADD,20190409,P81081 add store_mode node to control capacity
+//-Bug 600732,xushengjuan.wt,modify,20201118,S86117,charger bring up
 int smblib_init(struct smb_charger *chg);
 int smblib_deinit(struct smb_charger *chg);
+#if defined(CONFIG_AFC)
+int is_afc_result(struct smb_charger *chg,int result);
+#endif
+
+//Bug 603959, liangxiaoqin.wt, 20201216, add, add usb_notify node
+void smblib_notify_usb_host(struct smb_charger *chg, bool enable);
 #endif /* __SMB5_CHARGER_H */

@@ -41,6 +41,17 @@ config FB_MSM_MDP_NONE
 
 endchoice
 
+# //+Mtr4809, shenwenbin.wt, add, 20210126, add proc interface of mdss fb for adb rw panel reg 
+config DSI_READ_WRITE_PANEL_DEBUG
+	depends on FB_MSM_MDSS
+	bool "Enable DSI READ WRITE PANEL DEBUG"
+	default n
+	---help---
+	The DSI READ WRITE PANEL DEBUG implements mipi panel interface to read and write panel register by adb cmd.
+	
+	Say Y here if need this interface to debug.
+# //-Mtr4809, shenwenbin.wt, add, 20210126, add proc interface of mdss fb for adb rw panel reg 
+
 config FB_MSM_QPIC
 	bool
 	select FB_MSM_MDSS_COMMON
@@ -142,5 +153,12 @@ config FB_MSM_MDSS_FRC_DEBUG
 	frame rate control (FRC) debugging features to: Collect video frame
 	statistics and check whether its output pattern matches expected
 	cadence.
+
+config FB_MSM_MDSS_32BIT
+        bool "mdss config for 32bit Platform"
+        default n
+        depends on FB_MSM_MDSS
+        help
+          Mdss config signature for 32bit Platform
 
 endif

@@ -61,6 +61,11 @@
 #include <linux/amba/bus.h>
 #include <soc/qcom/msm_tz_smmu.h>
 
+#ifdef CONFIG_USER_RESET_DEBUG
+#include <linux/sec_debug.h>
+#include <linux/sec_debug_user_reset.h>
+#endif
+
 #include "io-pgtable.h"
 
 /* Maximum number of context banks per SMMU */
@@ -1446,6 +1451,45 @@ static phys_addr_t arm_smmu_verify_fault(struct iommu_domain *domain,
 	return (phys == 0 ? phys_post_tlbiall : phys);
 }
 
+static char* arm_smmu_get_devname(struct arm_smmu_domain *smmu_domain, u32 sid)
+{
+	struct iommu_fwspec *fwspec = NULL;
+	struct device* dev = NULL;
+	u32 i;
+	char *colon, *comma, *dot, *ch = NULL;
+
+	if (smmu_domain->dev)
+		fwspec = smmu_domain->dev->iommu_fwspec;
+
+	for (i = 0; fwspec && i < fwspec->num_ids; i++) {
+		if ((fwspec->ids[i] & smmu_domain->smmu->streamid_mask) == sid) {
+			dev = smmu_domain->dev;
+			break;
+		}
+	}
+
+	if (dev) {
+		if (dev_is_pci(dev))
+			return (char *)dev_name(dev);
+			
+		colon = strrchr(dev_name(dev), ':');
+		comma = strrchr(dev_name(dev), ',');
+		dot = strrchr(dev_name(dev), '.');
+
+		if (colon == NULL && comma == NULL && dot == NULL)
+			return (char *)dev_name(dev);
+		
+		if (colon > comma)
+			ch = colon;
+		else
+			ch = comma;
+
+		return dot > ch ? dot + 1 : ch + 1;
+	}
+
+	return "No Device";
+}
+
 static irqreturn_t arm_smmu_context_fault(int irq, void *dev)
 {
 	int flags, ret, tmp;
@@ -1466,7 +1510,9 @@ static irqreturn_t arm_smmu_context_fault(int irq, void *dev)
 	static DEFINE_RATELIMIT_STATE(_rs,
 				      DEFAULT_RATELIMIT_INTERVAL,
 				      DEFAULT_RATELIMIT_BURST);
-
+#ifdef CONFIG_USER_RESET_DEBUG
+	ex_info_smmu_t sec_dbg_smmu;
+#endif
 	ret = arm_smmu_power_on(smmu->pwr);
 	if (ret)
 		return IRQ_NONE;
@@ -1483,6 +1529,11 @@ static irqreturn_t arm_smmu_context_fault(int irq, void *dev)
 	if (fatal_asf && (fsr & FSR_ASF)) {
 		dev_err(smmu->dev,
 			"Took an address size fault.  Refusing to recover.\n");
+#ifdef CONFIG_USER_RESET_DEBUG
+		snprintf(sec_dbg_smmu.dev_name, sizeof(sec_dbg_smmu.dev_name), "%s", dev_name(smmu->dev));
+		sec_dbg_smmu.fsr = fsr;
+		sec_debug_save_smmu_info(&sec_dbg_smmu);
+#endif
 		BUG();
 	}
 
@@ -1549,7 +1600,21 @@ static irqreturn_t arm_smmu_context_fault(int irq, void *dev)
 		if (!non_fatal_fault) {
 			dev_err(smmu->dev,
 				"Unhandled arm-smmu context fault!\n");
-			BUG();
+#ifdef CONFIG_USER_RESET_DEBUG
+			snprintf(sec_dbg_smmu.dev_name, sizeof(sec_dbg_smmu.dev_name), "%s", dev_name(smmu->dev));
+			sec_dbg_smmu.fsr = fsr;
+			sec_dbg_smmu.fsynr0 = fsynr;
+			sec_dbg_smmu.iova = iova;
+			sec_dbg_smmu.far = (unsigned long)iova;
+			sec_dbg_smmu.cbndx = cfg->cbndx;
+			sec_dbg_smmu.phys_soft = phys_soft;
+			sec_dbg_smmu.phys_atos = phys_atos; 
+			sec_dbg_smmu.sid = frsynra;
+
+			sec_debug_save_smmu_info(&sec_dbg_smmu);
+#endif
+			//BUG();
+			panic("%s SMMU Fault - SID=0x%x", arm_smmu_get_devname(smmu_domain, frsynra), frsynra);
 		}
 	}
 

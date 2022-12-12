@@ -53,6 +53,14 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/trace_msm_low_power.h>
 
+#ifdef CONFIG_SEC_DEBUG_POWER_LOG
+#include <linux/sec_debug.h>
+#include <linux/sec_debug_summary.h>
+#endif
+#ifdef CONFIG_SEC_PM
+#include <linux/regulator/consumer.h>
+#endif
+
 #define SCLK_HZ (32768)
 #define PSCI_POWER_STATE(reset) (reset << 30)
 #define PSCI_AFFINITY_LEVEL(lvl) ((lvl & 0x3) << 24)
@@ -1041,6 +1049,11 @@ static int cluster_configure(struct lpm_cluster *cluster, int idx,
 	}
 
 	if (idx != cluster->default_level) {
+#ifdef CONFIG_SEC_DEBUG_POWER_LOG
+		sec_debug_cluster_lpm_log(cluster->cluster_name, idx,
+				cluster->num_children_in_sync.bits[0],
+				cluster->child_cpus.bits[0], from_idle, 1);
+#endif
 		update_debug_pc_event(CLUSTER_ENTER, idx,
 			cluster->num_children_in_sync.bits[0],
 			cluster->child_cpus.bits[0], from_idle);
@@ -1220,6 +1233,12 @@ static void cluster_unprepare(struct lpm_cluster *cluster,
 	trace_cluster_exit(cluster->cluster_name, cluster->last_level,
 			cluster->num_children_in_sync.bits[0],
 			cluster->child_cpus.bits[0], from_idle);
+
+#ifdef CONFIG_SEC_DEBUG_POWER_LOG
+	sec_debug_cluster_lpm_log(cluster->cluster_name, cluster->last_level,
+			cluster->num_children_in_sync.bits[0],
+			cluster->child_cpus.bits[0], from_idle, 0);
+#endif
 
 	last_level = cluster->last_level;
 	cluster->last_level = cluster->default_level;
@@ -1418,7 +1437,15 @@ static int lpm_cpuidle_enter(struct cpuidle_device *dev,
 	if (need_resched())
 		goto exit;
 
+/* FIXME : remove secdbg logging for reducing cpu hang issues */
+#if 0 //#ifdef CONFIG_SEC_DEBUG_POWER_LOG 
+	sec_debug_cpu_lpm_log(dev->cpu, idx, 0, 1);
+	secdbg_sched_msg("+Idle(%s)", cpu->levels[idx].name);
 	success = psci_enter_sleep(cpu, idx, true);
+	secdbg_sched_msg("-Idle(%s)", cpu->levels[idx].name);
+#else
+	success = psci_enter_sleep(cpu, idx, true);
+#endif
 
 exit:
 	end_time = ktime_to_ns(ktime_get());
@@ -1429,6 +1456,12 @@ exit:
 	dev->last_residency = ktime_us_delta(ktime_get(), start);
 	update_history(dev, idx);
 	trace_cpu_idle_exit(idx, success);
+
+/* FIXME : remove secdbg logging for reducing cpu hang issues */
+#if 0 //#ifdef CONFIG_SEC_DEBUG_POWER_LOG 
+	sec_debug_cpu_lpm_log(dev->cpu, idx, success, 0);
+#endif
+
 	if (lpm_prediction && cpu->lpm_prediction) {
 		histtimer_cancel();
 		clusttimer_cancel();
@@ -1655,6 +1688,9 @@ static void register_cluster_lpm_stats(struct lpm_cluster *cl,
 static int lpm_suspend_prepare(void)
 {
 	suspend_in_progress = true;
+#ifdef CONFIG_SEC_PM
+	regulator_showall_enabled();
+#endif
 	lpm_stats_suspend_enter();
 
 	return 0;

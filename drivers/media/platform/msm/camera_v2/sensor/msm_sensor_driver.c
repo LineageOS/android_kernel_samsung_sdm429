@@ -18,6 +18,12 @@
 #include "msm_cci.h"
 #include "msm_camera_dt_util.h"
 #include "msm_sensor_driver.h"
+//++bug 601075,jiaozhibin.wt,add, 2020.11.21,P81081DA7 project camera kernel code for gc2375h_lhyx bring up
+#include <linux/hardware_info.h>//bug515614 yinjie1.wt, add,2019/12/02,86118 project camera kernel code for bring up(add hardware info)
+#include <linux/of_gpio.h>
+#include <linux/cdev.h>       /* cdev_init */
+#include <linux/platform_device.h>
+//--bug 601075,jiaozhibin.wt,add, 2020.11.21,P81081DA7 project camera kernel code for gc2375h_lhyx bring up
 
 /* Logging macro */
 #undef CDBG
@@ -30,6 +36,198 @@ static int32_t msm_sensor_driver_platform_probe(struct platform_device *pdev);
 
 /* Static declaration */
 static struct msm_sensor_ctrl_t *g_sctrl[MAX_CAMERAS];
+
+//+bug 600732,huangguoyong.wt, add,2020/11/27,86118 project camera kernel code for bring up(dual camera)
+#define samsung_dcam_cal
+#ifdef samsung_dcam_cal
+static struct device_attribute dev_attr_dcam_cal;
+struct class *dcam_class;
+static int8_t cam_num = 0;
+#endif
+
+#define HI1336_BACKMAIN_MATCH_MODULE_INFO
+
+int hi846_insensor_read_otp_info_match_sensor(struct msm_sensor_ctrl_t * s_ctrl);
+int gc5035_insensor_read_otp_info_match_sensor(struct msm_sensor_ctrl_t * s_ctrl);
+static int msm_sensor_gc8034_otp_get_group_index(uint8_t flag)
+{
+    int8_t group_index = -1;
+    if((flag&0x03) == 0x01)
+        group_index = 2;
+    else if(((flag&0x0C)>> 2) == 0x01)
+        group_index = 1;
+    else{
+        group_index = -1;
+    }
+    pr_info("gc8034 group_index=%d",group_index);
+    return group_index;
+}
+
+/******************************************
+ event:
+   0x00:  set main camera name
+   0x01 :  set front camera name
+   0x10: set main camera module ID
+   0x11: set front camera module ID
+******************************************/
+void msm_sensor_set_info(int event,void* buf)
+{
+   char* s_name = NULL;
+   uint8_t* e_buf = NULL;
+   char* m_mod_txd = "tongxingda";
+   char* m_mod_lce = "lce";
+   char* m_mod_shinetech = "shinetech";
+   char* m_mod_truly = "truly";
+   char* m_mod_holitech = "holitech";
+   char* m_mod_qunhui = "qunhui";
+   char* unknown = "Unknown";
+   if(buf == NULL ){
+          pr_err("%s: error camera info \n", __func__);
+          return;
+   }
+   if(event < 0x10)
+         s_name = (char*)buf;
+   else {
+         e_buf = (uint8_t*)buf;
+   }
+
+   switch(event){
+        case 0x00:
+		hardwareinfo_set_prop(HARDWARE_BACK_CAM, s_name);
+		break;
+	case 0x01:
+		hardwareinfo_set_prop(HARDWARE_FRONT_CAM, s_name);
+		break;
+	case 0x02:
+		hardwareinfo_set_prop(HARDWARE_BACK_SUBCAM, s_name);//bug519750 [camera-BSP][other]camera id change for aux camera and wide camera sensor name
+		break;
+	case 0x03:
+		hardwareinfo_set_prop(HARDWARE_BACK_WIDE_CAM, s_name);//bug519750 [camera-BSP][other]camera id change for aux camera and wide camera sensor name
+		break;
+	case 0x10:
+		if((e_buf[0] == 0x55)&&(e_buf[1] == 0x19)){
+			hardwareinfo_set_prop(HARDWARE_BACK_CAM_MOUDULE_ID,m_mod_txd);
+			s_name = m_mod_txd;
+			cam_num = 1;
+		}else if((e_buf[0] == 0x55)&&(e_buf[1] == 0x10)){
+			hardwareinfo_set_prop(HARDWARE_BACK_CAM_MOUDULE_ID,m_mod_holitech);
+			s_name = m_mod_holitech;
+			cam_num = 2;
+		}
+		else if(((e_buf[0] == 0x01)&&(e_buf[1] == 0x19))|| \
+		         ((e_buf[0] == 0x13)&&(e_buf[1+8] == 0x19))||  \
+		         ((e_buf[0] == 0x37)&&(e_buf[1+16] == 0x19)))
+		{
+			hardwareinfo_set_prop(HARDWARE_BACK_CAM_MOUDULE_ID,m_mod_txd);
+			s_name = m_mod_txd;
+			cam_num = 1;
+		}
+		else if(msm_sensor_gc8034_otp_get_group_index(e_buf[(9*128 + 0x0378/8)]) == 1 && e_buf[(9*128 + 0x0380/8)] == 0x0A)
+		{
+			hardwareinfo_set_prop(HARDWARE_BACK_CAM_MOUDULE_ID,m_mod_qunhui);
+			s_name = m_mod_qunhui;
+		}
+		else if(msm_sensor_gc8034_otp_get_group_index(e_buf[(9*128 + 0x0378/8)]) == 2 && e_buf[(9*128 + 0x03C0/8)] == 0x0A)
+		{
+			hardwareinfo_set_prop(HARDWARE_BACK_CAM_MOUDULE_ID,m_mod_qunhui);
+			s_name = m_mod_qunhui;
+		}
+		else if((e_buf[0] == 0x55)&&(e_buf[1] == 0x06)){
+			hardwareinfo_set_prop(HARDWARE_BACK_CAM_MOUDULE_ID,m_mod_truly);
+			s_name = m_mod_truly;
+			cam_num = 3;
+		}
+		//+bug 515614,huangguoyong.wt,add,2020/11/25, P81081 machine the factory display problem
+		//else
+			//hardwareinfo_set_prop(HARDWARE_BACK_CAM_MOUDULE_ID,unknown);
+		//-bug 515614,huangguoyong.wt,add,2020/11/25, P81081 machine the factory display problem
+		break;
+	case 0x11:
+		pr_err("otp module info debug e_buf[0] = 0x%x, e_buf[1] = 0x%x, e_buf[1+8] = 0x%x,  e_buf[1+16] = 0x%x", e_buf[0], e_buf[1], e_buf[1+8], e_buf[1+16]);
+		if(((e_buf[0] == 0x01)&&(e_buf[1] == 0x17))|| \
+			((e_buf[0] == 0x13)&&(e_buf[1+ (0x0212 - 0x0201)*1] == 0x17))||  \
+			((e_buf[0] == 0x37)&&(e_buf[1+(0x0212 - 0x0201)*2] == 0x17))){
+			hardwareinfo_set_prop(HARDWARE_FRONT_CAM_MOUDULE_ID,m_mod_shinetech);
+			s_name = m_mod_shinetech;
+		}
+		else if(((e_buf[0] == 0x01)&&(e_buf[1] == 0x19))|| \
+			((e_buf[0] == 0x13)&&(e_buf[1+(0x0212 - 0x0201)*1] == 0x19))||  \
+			((e_buf[0] == 0x37)&&(e_buf[1+(0x0212 - 0x0201)*2] == 0x19)))
+		{
+			hardwareinfo_set_prop(HARDWARE_FRONT_CAM_MOUDULE_ID,m_mod_txd);
+			s_name = m_mod_txd;
+		}
+		else if((e_buf[0] == 0x55)&&(e_buf[1] == 0x19))
+		{
+			hardwareinfo_set_prop(HARDWARE_FRONT_CAM_MOUDULE_ID,m_mod_txd);
+			s_name = m_mod_txd;
+		}
+		else if(((e_buf[0] == 0x55)&&(e_buf[1] == 0x10))|| \
+			((e_buf[(0x0A0D - 0x0A04 + 1)] == 0x55)&&(e_buf[(0x0A0D - 0x0A04 + 2)] == 0x10)))  //Type Bug440446, wuhaopeng.wt, add, 2019.06.26, add s5k4h7_front hardware info
+		{
+			hardwareinfo_set_prop(HARDWARE_FRONT_CAM_MOUDULE_ID,m_mod_holitech);
+			s_name = m_mod_txd;
+		}
+		else
+			hardwareinfo_set_prop(HARDWARE_FRONT_CAM_MOUDULE_ID,unknown);
+		break;
+	case 0x12:
+		pr_err("otp module info debug e_buf[0] = 0x%x, e_buf[1] = 0x%x, e_buf[1+8] = 0x%x,  e_buf[1+16] = 0x%x", e_buf[0], e_buf[1], e_buf[1+8], e_buf[1+16]);
+		if(((e_buf[0] == 0x01)&&(e_buf[1] == 0x06))|| \
+			((e_buf[0] == 0x13)&&(e_buf[1+(0x0212 - 0x0201)*1] == 0x06))||  \
+			((e_buf[0] == 0x37)&&(e_buf[1+(0x0212 - 0x0201)*2] == 0x06)))
+		{
+			hardwareinfo_set_prop(HARDWARE_BACK_WIDE_CAM_MOUDULE_ID,m_mod_truly);
+			s_name = m_mod_truly;
+		}
+		else if(((e_buf[0] == 0x01)&&(e_buf[1] == 0x17))|| \
+			((e_buf[0] == 0x13)&&(e_buf[1+(0x0212 - 0x0201)*1] == 0x17))||  \
+			((e_buf[0] == 0x37)&&(e_buf[1+(0x0212 - 0x0201)*2] == 0x17))||  \
+			((e_buf[0] == 0x55)&&(e_buf[1] == 0x17)))
+		{
+			hardwareinfo_set_prop(HARDWARE_BACK_WIDE_CAM_MOUDULE_ID,m_mod_shinetech);
+			s_name = m_mod_shinetech;
+		}
+		else if(((e_buf[0] == 0x55)&&(e_buf[1] == 0x10))|| \
+			((e_buf[(0x0A0D - 0x0A04 + 1)] == 0x55)&&(e_buf[(0x0A0D - 0x0A04 + 2)] == 0x10)))  //add by shanglei.wt for s5k4h7_wide
+		{
+			hardwareinfo_set_prop(HARDWARE_BACK_WIDE_CAM_MOUDULE_ID,m_mod_holitech);
+			s_name = m_mod_holitech;
+		}
+		else
+			hardwareinfo_set_prop(HARDWARE_BACK_WIDE_CAM_MOUDULE_ID,unknown);
+		break;
+	case 0x13:
+		pr_err("otp module info debug e_buf[0] = %d, e_buf[1] = %d, e_buf[2] = %d, ", e_buf[0], e_buf[1], e_buf[2]);
+		pr_err("otp module info debug e_buf[730] = %d, e_buf[731] = %d, e_buf[739] = %d, ", e_buf[730], e_buf[731], e_buf[739]);
+		if(((e_buf[0] == 0x01)&&(e_buf[1] == 0x17))|| \
+			((e_buf[0] == 0x13)&&(e_buf[1+(0x0412 - 0x0401)*1] == 0x17))||  \
+			((e_buf[0] == 0x37)&&(e_buf[1+(0x0412 - 0x0401)*2] == 0x17))){
+			hardwareinfo_set_prop(HARDWARE_BACK_SUBCAM_MODULEID,m_mod_shinetech);
+			s_name = m_mod_shinetech;
+		}
+		else if((( ((e_buf[730] >> 2) & 0x03) == 0x01) && (e_buf[731] == 0x18))|| \
+			( ( (e_buf[730] & 0x03) == 0x01) && (e_buf[739] == 0x18)))
+		{
+			hardwareinfo_set_prop(HARDWARE_BACK_SUBCAM_MODULEID,m_mod_lce);
+			s_name = m_mod_lce;
+		}
+		else if((( ((e_buf[730] >> 2) & 0x03) == 0x01) && (e_buf[731] == 0x10))|| \
+			( ( (e_buf[730] & 0x03) == 0x01) && (e_buf[739] == 0x10)))
+		{
+			hardwareinfo_set_prop(HARDWARE_BACK_SUBCAM_MODULEID,m_mod_holitech);
+			s_name = m_mod_holitech;
+		}
+		else
+			hardwareinfo_set_prop(HARDWARE_BACK_SUBCAM_MODULEID,unknown);
+		break;
+	default:
+		pr_err("%s: unknown event \n", __func__);
+		return;
+   }
+   pr_err("%s:event Id 0x%x, %s \n", __func__,event,s_name?s_name:unknown);
+}
+//-bug 600732,huangguoyong.wt, add,2020/11/27,86118 project camera kernel code for bring up(dual camera)
 
 static int msm_sensor_platform_remove(struct platform_device *pdev)
 {
@@ -745,10 +943,88 @@ static int32_t msm_sensor_driver_is_special_support(
 	return rc;
 }
 
+//+bug 600732,huangguoyong.wt, add,2020/11/16,86118 project camera kernel code for bring up(multi cam compatibility)
+#define S5K3L6_ID_REG_ADDR                        0x0001
+#define S5K3L6_BACKMAIN_HLT_MODULE_ID             16
+#define S5K3L6_BACKMAIN_TS_MODULE_ID              19
+
+int s5k3l6_eeprom_read_info_match_sensor(struct msm_sensor_ctrl_t * s_ctrl)
+{
+   uint16_t module_id = 0;
+   int match_result;
+   int rc;
+
+   rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_read((s_ctrl->sensor_i2c_client), S5K3L6_ID_REG_ADDR, &module_id, 1);
+   pr_err("s5k3l6 module id is : %d\n", module_id);
+   if((strcmp(s_ctrl->sensordata->sensor_name, "s5k3l6_backmain_holitech") == 0) && module_id == S5K3L6_BACKMAIN_HLT_MODULE_ID)
+   {
+      match_result = true;
+      pr_info("match sensor is s5k3l6_backmain_hlt\n");
+   }
+   else if((strcmp(s_ctrl->sensordata->sensor_name, "s5k3l6_backmain_dongci") == 0) && module_id == S5K3L6_BACKMAIN_TS_MODULE_ID)
+   {
+      match_result = true;
+      pr_info("match sensor is s5k3l6_backmain_ts\n");
+   }
+   else
+   {
+      match_result = false;
+      pr_err("S5K3L6 find camera error");
+   }
+   return match_result;
+
+}
+//-bug515614 yinjie1.wt, add,2019/12/02,86118 project camera kernel code for bring up(multi cam compatibility)
+
+//+bug515614 yinjie1.wt, add,2019/12/02,86118 project camera kernel code for bring up
+#ifdef HI1336_BACKMAIN_MATCH_MODULE_INFO
+#define HI1336_ID_REG_ADDR                                       0x0001
+#define HI1336_BACKMAIN_TXD_MODULE_ID             0x19
+#define HI1336_BACKMAIN_TRULY_MODULE_ID         0x06
+
+int hi1336_eeprom_read_info_match_sensor(struct msm_sensor_ctrl_t * s_ctrl)
+{
+   uint16_t module_id = 0;
+   int match_result;
+   int rc;
+
+   rc = s_ctrl->sensor_i2c_client->i2c_func_tbl->i2c_read((s_ctrl->sensor_i2c_client), HI1336_ID_REG_ADDR, &module_id, 1);
+   pr_info("hi1336 module id is : %d\n", module_id);
+   if((strcmp(s_ctrl->sensordata->sensor_name, "hi1336_backmain_TXD") == 0) && module_id == HI1336_BACKMAIN_TXD_MODULE_ID)
+   {
+      match_result = true;
+      pr_info("match sensor is hi1336_backmain_TXD\n");
+   }
+   else if((strcmp(s_ctrl->sensordata->sensor_name, "hi1336_backmain3_truly") == 0) && module_id == HI1336_BACKMAIN_TRULY_MODULE_ID)
+   {
+      match_result = true;
+      pr_info("match sensor is hi1336_backmain3_truly\n");
+   }
+   else
+   {
+      match_result = false;
+      pr_err("hi1336 find camera error");
+   }
+   return match_result;
+
+}
+#endif
+//-bug 600732,huangguoyong.wt, add,2020/11/16,86118 project camera kernel code for bring up
+
 /* static function definition */
 int32_t msm_sensor_driver_probe(void *setting,
 	struct msm_sensor_info_t *probed_info, char *entity_name)
 {
+//+bug 600732,huangguoyong.wt, add,2020/11/16,86118 project camera kernel code for bring up
+	uint16_t s5k3l6_addr_temp = 0x00;
+
+#ifdef HI1336_BACKMAIN_MATCH_MODULE_INFO
+	uint16_t hi1336_addr_temp = 0x00;
+#endif
+//-bug 600732,huangguoyong.wt, add,2020/11/16,86118 project camera kernel code for bring up
+
+	int32_t gpio_value =0;//bug 601075,jiaozhibin,add, 2020/11/21,P81081DA7 project camera kernel code for gc2375h_lhyx bring up
+
 	int32_t                              rc = 0;
 	struct msm_sensor_ctrl_t            *s_ctrl = NULL;
 	struct msm_camera_cci_client        *cci_client = NULL;
@@ -1136,6 +1412,73 @@ CSID_TG:
 		goto free_camera_info;
 	}
 
+//+bug 600732,huangguoyong.wt, add,2020/11/16,86118 project camera kernel code for bring up
+#ifdef HI1336_BACKMAIN_MATCH_MODULE_INFO
+      if(strcmp(slave_info->sensor_name, "hi1336_backmain_TXD") == 0 || strcmp(slave_info->sensor_name, "hi1336_backmain3_truly") == 0)//back main
+      {
+          hi1336_addr_temp = cci_client->sid;
+          cci_client->sid = 0xA0 >> 1;
+          if(hi1336_eeprom_read_info_match_sensor(s_ctrl) == false)
+          {
+                cci_client->sid = hi1336_addr_temp;
+                pr_err("%s hi1336  match  failed", slave_info->sensor_name);
+                goto camera_power_down;
+              }
+          cci_client->sid = hi1336_addr_temp;
+      }
+#endif
+      if(strcmp(slave_info->sensor_name, "hi846_front_shinetech") == 0 || strcmp(slave_info->sensor_name, "hi846_front_txd") == 0
+         ||strcmp(s_ctrl->sensordata->sensor_name, "hi846_wide_truly") == 0 || strcmp(s_ctrl->sensordata->sensor_name, "hi846_wide_shinetech") == 0)//front
+      {
+          if(hi846_insensor_read_otp_info_match_sensor(s_ctrl) == false)
+          {
+                pr_err("%s hi846  match  failed", slave_info->sensor_name);
+                goto camera_power_down;
+          }
+      }
+//+bug515614 yinjie1.wt, add,2019/12/02,86118 project camera kernel code for bring up(multi cam compatibility)
+      if(strcmp(slave_info->sensor_name, "s5k3l6_backmain_holitech") == 0 || strcmp(slave_info->sensor_name, "s5k3l6_backmain_dongci") == 0)   //back main 
+      {
+          s5k3l6_addr_temp = cci_client->sid;
+          cci_client->sid = 0xA0 >> 1;
+          if(s5k3l6_eeprom_read_info_match_sensor(s_ctrl) == false)
+          {
+                cci_client->sid = s5k3l6_addr_temp;
+                pr_err("%s s5k3l6  match  failed", slave_info->sensor_name);
+                goto camera_power_down;
+          }
+          cci_client->sid = s5k3l6_addr_temp;
+      }
+//-bug515614 yinjie1.wt, add,2019/12/02,86118 project camera kernel code for bring up(multi cam compatibility)
+      if(strcmp(slave_info->sensor_name, "gc5035_depth_lce") == 0 || strcmp(slave_info->sensor_name, "gc5035_depth_holitech") == 0)   //back main 
+      {
+            uint8_t addr_temp = s_ctrl->sensor_i2c_client->addr_type;
+            if(gc5035_insensor_read_otp_info_match_sensor(s_ctrl) == false)
+            {
+                pr_err("%s gc5035  match  failed", slave_info->sensor_name);
+                s_ctrl->sensor_i2c_client->addr_type = addr_temp;
+                goto camera_power_down;
+            }
+            s_ctrl->sensor_i2c_client->addr_type = addr_temp;
+      }
+//-bug 600732,huangguoyong.wt, add,2020/11/16,86118 project camera kernel code for bring up
+
+      //++bug 601075,jiaozhibin.wt,add, 2020.11.20,P81081DA5 project camera kernel code for gc2375h_lhyx bring up
+      if(strcmp(slave_info->sensor_name, "gc2375h_lhyx") == 0 || strcmp(slave_info->sensor_name, "gc2375h") == 0)//n8 front
+      {
+            gpio_value = gpio_get_value(35);
+            pr_err("gpio35_value = %d  ",gpio_value);//bug 621294,jiaozhibin.wt,modify,2021/01/21,S86117 project for fix null pointer dereference
+            if(gpio_value ==0 && strcmp(slave_info->sensor_name, "gc2375h") == 0)
+                pr_err("gc2375h success");
+            if(gpio_value ==1 && strcmp(slave_info->sensor_name, "gc2375h_lhyx") == 0)
+                pr_err("gc2375h_lhyx success");
+            if(gpio_value ==1 && strcmp(slave_info->sensor_name, "gc2375h") == 0)
+                goto camera_power_down;
+            if(gpio_value ==0 && strcmp(slave_info->sensor_name, "gc2375h_lhyx") == 0)
+                goto camera_power_down;
+      }
+      //--bug 601075,jiaozhibin.wt,add, 2020.11.20,P81081DA5 project camera kernel code for gc2375h_lhyx bring up
+
 	pr_err("%s probe succeeded", slave_info->sensor_name);
 
 	s_ctrl->bypass_video_node_creation =
@@ -1185,6 +1528,37 @@ CSID_TG:
 
 	msm_sensor_fill_sensor_info(s_ctrl, probed_info, entity_name);
 
+//++bug601075 jiaozhibin.wt, add,2020/11/23,P81081DA7 project camera kernel code for bring up(add hardware info.)
+      msm_sensor_set_info((slave_info->camera_id),(void*)slave_info->sensor_name);
+      if (!strcmp(probed_info->sensor_name,"hi846")){
+        hardwareinfo_set_prop(HARDWARE_BACK_CAM,"hi846");
+        hardwareinfo_set_prop(HARDWARE_BACK_CAM_MOUDULE_ID,"tongxingda");
+      } else if (!strcmp(probed_info->sensor_name,"gc2375h")){
+        hardwareinfo_set_prop(HARDWARE_FRONT_CAM,"gc2375h");
+        hardwareinfo_set_prop(HARDWARE_FRONT_CAM_MOUDULE_ID,"qunhui");
+      }else if (!strcmp(probed_info->sensor_name,"gc2375a")){
+        hardwareinfo_set_prop(HARDWARE_FRONT_CAM,"gc2375a");
+        hardwareinfo_set_prop(HARDWARE_FRONT_CAM_MOUDULE_ID,"lianheyx");
+      }else if (!strcmp(probed_info->sensor_name,"gc8034")){
+        hardwareinfo_set_prop(HARDWARE_BACK_CAM,"gc8034");
+        hardwareinfo_set_prop(HARDWARE_BACK_CAM_MOUDULE_ID,"qunhui");
+      //+bug 538241,huangguoyong.wt,2020.05.28,add hardware info
+      }else if (!strcmp(probed_info->sensor_name,"hi259")){
+        hardwareinfo_set_prop(HARDWARE_FRONT_CAM,"hi259");
+        hardwareinfo_set_prop(HARDWARE_FRONT_CAM_MOUDULE_ID,"qunhui");
+      //-bug 538241,huangguoyong.wt,2020.05.28,add hardware info
+      //+bug 515614,huangguoyong,add, 2020.08.26,N8 project camera kernel code for gc2375h_lhyx bring up
+      }else if (!strcmp(probed_info->sensor_name,"gc2375h_lhyx")){
+        hardwareinfo_set_prop(HARDWARE_FRONT_CAM,"gc2375h_lhyx");
+        hardwareinfo_set_prop(HARDWARE_FRONT_CAM_MOUDULE_ID,"lianheyx");
+      //-bug 515614,huangguoyong,add, 2020.08.26,N8 project camera kernel code for gc2375h_lhyx bring up
+      //+bug 515614,huangguoyong,add, 2020.08.31,N8 project camera kernel code for bf2253L bring up
+      }else if (!strcmp(probed_info->sensor_name,"bf2253L")){
+        hardwareinfo_set_prop(HARDWARE_FRONT_CAM,"bf2253L");
+        hardwareinfo_set_prop(HARDWARE_FRONT_CAM_MOUDULE_ID,"lianheyx_biyadi");
+      }
+      //-bug 515614,huangguoyong,add, 2020.08.31,N8 project camera kernel code for bf2253L bring up
+//--bug601075 jiaozhibin.wt, add,2020/11/23,P81081DA7 project camera kernel code for bring up(add hardware info.)
 	/*
 	 * Set probe succeeded flag to 1 so that no other camera shall
 	 * probed on this slot
@@ -1420,7 +1794,24 @@ FREE_SENSOR_I2C_CLIENT:
 	kfree(s_ctrl->sensor_i2c_client);
 	return rc;
 }
-
+//+bug 600732,huangguoyong.wt, add,2020/11/16,86118 project camera kernel code for bring up(dual camera)
+#ifdef samsung_dcam_cal
+static ssize_t show_dcam_cal(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	//int buf_size = 0;
+	printk("show_dcam_cal cam_num:%d", cam_num);
+	if(cam_num == 1)
+		return snprintf(buf, PAGE_SIZE, "%s\n","1");
+	else if(cam_num == 2)
+		return snprintf(buf, PAGE_SIZE, "%s\n","2");
+	else if(cam_num == 3)
+		return snprintf(buf, PAGE_SIZE, "%s\n","3");
+	else
+		return snprintf(buf, PAGE_SIZE, "%s\n","0");
+}
+//-bug 600732,huangguoyong.wt, add,2020/11/16,86118 project camera kernel code for bring up(dual camera)
+static DEVICE_ATTR(dcam_cal, 0664, show_dcam_cal, NULL);
+#endif
 static int32_t msm_sensor_driver_platform_probe(struct platform_device *pdev)
 {
 	int32_t rc = 0;
@@ -1553,11 +1944,46 @@ static struct i2c_driver msm_sensor_driver_i2c = {
 		.name = SENSOR_DRIVER_I2C,
 	},
 };
+//+bug 600732,huangguoyong.wt, add,2020/11/16,86118 project camera kernel code for bring up(dual camera)
+#ifdef samsung_dcam_cal
+int samsung_dcam_cal_node_create(void)
+{
+	int32_t rc_1 = 0;
+	struct device *dcam_device;
 
+	dcam_class = class_create(THIS_MODULE, "dcam");
+	//if (IS_ERR(dcam_class))
+		pr_err("kzalloc for tp_gesture_device failed!\n");
+
+    dcam_device = kzalloc(sizeof(struct device), GFP_KERNEL);
+
+    if (!dcam_device) {
+    	pr_err("kzalloc for tp_gesture_device failed!\n");
+     //   return -ENOMEM;
+    }
+    dcam_device = device_create(dcam_class, NULL, 0, NULL, "dcam_cal");
+    if (rc_1){
+        pr_err("device_register for tp_gesture failed!\n");
+    }
+	rc_1 = device_create_file(dcam_device, &dev_attr_dcam_cal);
+    if (rc_1 < 0){
+        pr_err("failed: dual camera sys");
+        kfree(dcam_device);//bug 621371,jiaozhibin.wt,add,2021/01/19,86116 project fix resource leak
+    }
+    return rc_1;
+
+}
+#endif
+//-bug 600732,huangguoyong.wt, add,2020/11/16,86118 project camera kernel code for bring up(dual camera)
 static int __init msm_sensor_driver_init(void)
 {
 	int32_t rc = 0;
-
+//+bug 600732,huangguoyong.wt, add,2020/11/16,86118 project camera kernel code for bring up(dual camera)
+#ifdef samsung_dcam_cal
+	int32_t ret = 0;
+	ret = samsung_dcam_cal_node_create();
+#endif
+//-bug 600732,huangguoyong.wt, add,2020/11/16,86118 project camera kernel code for bring up(dual camera)
 	CDBG("%s Enter\n", __func__);
 	rc = platform_driver_register(&msm_sensor_platform_driver);
 	if (rc)

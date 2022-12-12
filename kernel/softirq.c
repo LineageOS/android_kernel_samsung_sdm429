@@ -27,6 +27,11 @@
 #include <linux/tick.h>
 #include <linux/irq.h>
 
+#ifdef CONFIG_SEC_DEBUG
+#include <linux/sec_debug.h>
+#include <linux/sec_debug_summary.h>
+#endif
+
 #define CREATE_TRACE_POINTS
 #include <trace/events/irq.h>
 
@@ -289,8 +294,16 @@ restart:
 		kstat_incr_softirqs_this_cpu(vec_nr);
 
 		trace_softirq_entry(vec_nr);
+#ifdef CONFIG_SEC_DEBUG_SCHED_LOG
+		sec_debug_irq_sched_log(vec_nr, h->action,
+				"softirq", SOFTIRQ_ENTRY);
+#endif
 		h->action(h);
 		trace_softirq_exit(vec_nr);
+#ifdef CONFIG_SEC_DEBUG_SCHED_LOG
+		sec_debug_irq_sched_log(vec_nr, h->action,
+				"softirq", SOFTIRQ_EXIT);
+#endif
 		if (unlikely(prev_count != preempt_count())) {
 			pr_err("huh, entered softirq %u %s %p with preempt_count %08x, exited with %08x?\n",
 			       vec_nr, softirq_to_name[vec_nr], h->action,
@@ -524,7 +537,17 @@ static __latent_entropy void tasklet_action(struct softirq_action *a)
 				if (!test_and_clear_bit(TASKLET_STATE_SCHED,
 							&t->state))
 					BUG();
+#ifdef CONFIG_SEC_DEBUG_SCHED_LOG
+				sec_debug_irq_sched_log(-1, t->func,
+						"tasket_action",
+						SOFTIRQ_ENTRY);
+#endif
 				t->func(t->data);
+#ifdef CONFIG_SEC_DEBUG_SCHED_LOG
+				sec_debug_irq_sched_log(-1, t->func,
+						"tasket_action",
+						SOFTIRQ_EXIT);
+#endif
 				tasklet_unlock(t);
 				continue;
 			}

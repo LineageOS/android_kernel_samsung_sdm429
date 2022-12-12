@@ -34,6 +34,14 @@
 #include <linux/qpnp/qpnp-pbs.h>
 #include <linux/qpnp/qpnp-misc.h>
 #include <linux/power_supply.h>
+//bug428206,wuyuexiu_wt,add,2019/1/24,add boardid into hardware info
+#include <linux/hardware_info.h>
+
+#if defined(CONFIG_DRV_SAMSUNG)
+#include <linux/sec_class.h>
+#else
+extern struct class *sec_class;
+#endif
 
 #define PMIC_VER_8941           0x01
 #define PMIC_VERSION_REG        0x0105
@@ -246,6 +254,14 @@ module_param_named(
 static struct qpnp_pon *sys_reset_dev;
 static DEFINE_SPINLOCK(spon_list_slock);
 static LIST_HEAD(spon_dev_list);
+
+
+#if defined(CONFIG_SEC_PM)
+static int check_pkey_press;
+static int check_vdkey_press;
+static int pkey_press_count;
+static int vdkey_press_count;
+#endif
 
 static u32 s1_delay[PON_S1_COUNT_MAX + 1] = {
 	0, 32, 56, 80, 138, 184, 272, 408, 608, 904, 1352, 2048,
@@ -934,9 +950,11 @@ qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 	struct qpnp_pon_config *cfg = NULL;
 	u8  pon_rt_bit = 0;
 	u32 key_status;
-	uint pon_rt_sts;
+	uint pon_rt_sts, pon_rt_sts_ori;
 	u64 elapsed_us;
+	u8 first = 1;
 
+again:
 	cfg = qpnp_get_cfg(pon, pon_type);
 	if (!cfg)
 		return -EINVAL;
@@ -954,11 +972,14 @@ qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 		}
 	}
 
-	/* check the RT status to get the current status of the line */
-	rc = regmap_read(pon->regmap, QPNP_PON_RT_STS(pon), &pon_rt_sts);
-	if (rc) {
-		dev_err(&pon->pdev->dev, "Unable to read PON RT status\n");
-		return rc;
+	if (first) {
+		/* check the RT status to get the current status of the line */
+		rc = regmap_read(pon->regmap, QPNP_PON_RT_STS(pon), &pon_rt_sts_ori);
+		if (rc) {
+			dev_err(&pon->pdev->dev, "Unable to read PON RT status\n");
+			return rc;
+		}
+		pon_rt_sts = pon_rt_sts_ori;
 	}
 
 	switch (cfg->pon_type) {
@@ -978,8 +999,8 @@ qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 		return -EINVAL;
 	}
 
-	pr_debug("PMIC input: code=%d, sts=0x%hhx\n",
-					cfg->key_code, pon_rt_sts);
+	pr_err("PMIC input: code=%d, sts=0x%hhx, 0x%hhx\n",
+					cfg->key_code, pon_rt_sts_ori, pon_rt_sts);
 	key_status = pon_rt_sts & pon_rt_bit;
 
 	if (pon->kpdpwr_dbc_enable && cfg->pon_type == PON_KPDPWR) {
@@ -987,22 +1008,94 @@ qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
 			pon->kpdpwr_last_release_time = ktime_get();
 	}
 
-	/*
-	 * simulate press event in case release event occurred
-	 * without a press event
-	 */
-	if (!cfg->old_state && !key_status) {
-		input_report_key(pon->pon_input, cfg->key_code, 1);
-		input_sync(pon->pon_input);
-	}
+	if (!(cfg->old_state && !!key_status)) {
+		/*
+		 * simulate press event in case release event occurred
+		 * without a press event
+		 */
+		if (!cfg->old_state && !key_status) {
+			input_report_key(pon->pon_input, cfg->key_code, 1);
+			input_sync(pon->pon_input);
+		}
 
-	input_report_key(pon->pon_input, cfg->key_code, key_status);
-	input_sync(pon->pon_input);
+		input_report_key(pon->pon_input, cfg->key_code, key_status);
+		input_sync(pon->pon_input);
+		pr_info("%s %s: %d, 0x%x, 0x%x, %d\n", SECLOG, __func__, cfg->key_code, pon_rt_sts_ori, pon_rt_sts, !!key_status);
+	} else
+		pr_debug("%s %s: %d, 0x%x, 0x%x, %d (skip)\n", SECLOG, __func__, cfg->key_code, pon_rt_sts_ori, pon_rt_sts, !!key_status);
+
+#ifdef CONFIG_SEC_PM
+	/* RESIN is used for VOL DOWN key, it should report the keycode for kernel panic */
+	if ((cfg->key_code == KEY_VOLUMEDOWN) && (pon_rt_sts & pon_rt_bit)) {
+		check_vdkey_press = 1;
+	} else if ((cfg->key_code == KEY_VOLUMEDOWN)
+			   && !(pon_rt_sts & pon_rt_bit)) {
+		check_vdkey_press = 0;
+	}
+	if ((cfg->key_code == KEY_POWER) && (pon_rt_sts & pon_rt_bit)) {
+		check_pkey_press = 1;
+	} else if ((cfg->key_code == KEY_POWER) && !(pon_rt_sts & pon_rt_bit)) {
+		check_pkey_press = 0;
+	}
+#endif
 
 	cfg->old_state = !!key_status;
 
+	if (first) {
+		first = 0;
+		pon_rt_sts &= ~pon_rt_bit;
+		if (pon_rt_sts & QPNP_PON_RESIN_N_SET) {
+			pon_type = PON_RESIN;
+			goto again;
+		} else if (pon_rt_sts & QPNP_PON_KPDPWR_N_SET) {
+			pon_type = PON_KPDPWR;
+			goto again;
+		}
+	}
+
 	return 0;
 }
+
+#if defined(CONFIG_SEC_PM)
+int check_short_pkey(void)
+{
+	return check_pkey_press;
+}
+EXPORT_SYMBOL(check_short_pkey);
+
+int get_pkey_press(void)
+{
+	return check_pkey_press;
+}
+EXPORT_SYMBOL(get_pkey_press);
+
+int get_vdkey_press(void)
+{
+	return check_vdkey_press;
+}
+EXPORT_SYMBOL(get_vdkey_press);
+
+int pkey_pressed_count(int clear)
+{
+	if (clear)
+		pkey_press_count = 0;
+	else
+		return pkey_press_count;
+
+	return 0;
+}
+EXPORT_SYMBOL(pkey_pressed_count);
+int vdkey_pressed_count(int clear)
+{
+	if (clear)
+		vdkey_press_count = 0;
+	else
+		return vdkey_press_count;
+
+	return 0;
+}
+EXPORT_SYMBOL(vdkey_pressed_count);
+#endif
 
 static irqreturn_t qpnp_kpdpwr_irq(int irq, void *_pon)
 {
@@ -1275,6 +1368,13 @@ qpnp_config_reset(struct qpnp_pon *pon, struct qpnp_pon_config *cfg)
 		return rc;
 	}
 
+#ifdef CONFIG_SEC_DEBUG
+        /* Configure reset type:
+         * always do warm reset regardless of debug level
+         */
+        cfg->s2_type = PON_POWER_OFF_WARM_RESET;
+#endif
+
 	rc = qpnp_pon_masked_write(pon, cfg->s2_cntl_addr,
 				QPNP_PON_S2_CNTL_TYPE_MASK, (u8)cfg->s2_type);
 	if (rc) {
@@ -1293,6 +1393,65 @@ qpnp_config_reset(struct qpnp_pon *pon, struct qpnp_pon_config *cfg)
 
 	return 0;
 }
+
+#if defined(CONFIG_SEC_DEBUG) || defined(CONFIG_SEC_PM)
+int qpnp_control_s2_reset_onoff(int on)
+{
+        int rc;
+        struct qpnp_pon *pon = sys_reset_dev;
+        struct qpnp_pon_config *cfg;
+
+        cfg = qpnp_get_cfg(pon, PON_KPDPWR_RESIN);
+        if (!cfg) {
+                pr_err("Invalid config pointer\n");
+                return -EFAULT;
+        }
+#if 0
+        u16 s1_timer_addr = QPNP_PON_KPDPWR_RESIN_S1_TIMER(pon);
+
+        /* Make sure S1 Timer set to 0xE(MS_6720) */
+        if (on) {
+                rc = qpnp_pon_masked_write(pon, s1_timer_addr, QPNP_PON_S1_TIMER_MASK, 0xE);
+        }
+#endif
+        /* control S2 reset */
+        rc = qpnp_pon_masked_write(pon, cfg->s2_cntl2_addr,
+                                QPNP_PON_S2_CNTL_EN, on ? QPNP_PON_S2_CNTL_EN : 0);
+        if (rc) {
+                dev_err(&pon->pdev->dev, "Unable to configure S2 enable\n");
+                return rc;
+        }
+
+        return 0;
+}
+EXPORT_SYMBOL(qpnp_control_s2_reset_onoff);
+
+int qpnp_get_s2_reset_onoff(void)
+{
+        int rc;
+        struct qpnp_pon *pon = sys_reset_dev;
+        struct qpnp_pon_config *cfg;
+        uint val;
+        cfg = qpnp_get_cfg(pon, PON_KPDPWR_RESIN);
+        if (!cfg) {
+                pr_err("Invalid config pointer\n");
+                return -EFAULT;
+        }
+
+        /* get S2 reset */
+        rc = regmap_read(pon->regmap, cfg->s2_cntl2_addr, &val);
+        if (rc) {
+                dev_err(&pon->pdev->dev, "Unable to get S2 enable\n");
+                return rc;
+        }
+
+        if (val & QPNP_PON_S2_CNTL_EN)
+                return true;
+        else
+                return false;
+}
+EXPORT_SYMBOL(qpnp_get_s2_reset_onoff);
+#endif
 
 static int
 qpnp_pon_request_irqs(struct qpnp_pon *pon, struct qpnp_pon_config *cfg)
@@ -2067,6 +2226,78 @@ static void qpnp_pon_debugfs_remove(struct platform_device *pdev)
 {}
 #endif
 
+//+bug428206,wuyuexiu_wt,add,2019/1/24,add boardid into hardware info
+extern char board_id[HARDWARE_MAX_ITEM_LONGTH];
+void probe_board_and_set(void)
+{
+	char* boadrid_start;
+	char boardid_info[HARDWARE_MAX_ITEM_LONGTH];
+	boadrid_start = strstr(saved_command_line,"board_id=");
+	memset(boardid_info, 0, HARDWARE_MAX_ITEM_LONGTH);
+
+	if(boadrid_start != NULL)
+	{
+		strncpy(boardid_info, boadrid_start+sizeof("board_id=")-1, 9);
+	}
+	else
+	{
+		sprintf(boardid_info, "boarid not define!");
+	}
+
+	strcpy(board_id, boardid_info);
+
+}
+//-bug428206,wuyuexiu_wt,add,2019/1/24,add boardid into hardware info
+
+//+bug438403,wuyuexiu_wt,add,2019/4/16,add hardware id
+extern char hardware_id[HARDWARE_MAX_ITEM_LONGTH];
+void probe_hardwareid_and_set(void)
+{
+	char* hardwareid_start;
+	char hardwareid_info[HARDWARE_MAX_ITEM_LONGTH];
+	unsigned long hwid_len;
+	hardwareid_start = strstr(saved_command_line,"hardware_id=");
+	hwid_len = sizeof("hardware_id=");
+	memset(hardwareid_info, 0, HARDWARE_MAX_ITEM_LONGTH);
+
+	if(hardwareid_start != NULL)
+	{
+             if('R' == *(hardwareid_start+hwid_len-1))
+		{
+                   strncpy(hardwareid_info, hardwareid_start+hwid_len-1, 6);
+		}
+		else
+		{
+			strncpy(hardwareid_info, hardwareid_start+hwid_len-1, 5);
+		}
+
+	}
+	else
+	{
+		sprintf(hardwareid_info, "hardwareid not define!");
+	}
+
+	strcpy(hardware_id, hardwareid_info);
+}
+//-bug438403,wuyuexiu_wt,add,2019/4/16,add hardware id
+
+
+static ssize_t sysfs_powerkey_onoff_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	int state = 0;
+#ifdef CONFIG_SEC_PM
+	if (check_pkey_press || check_vdkey_press)
+		state = 1;
+#endif
+	pr_info("%s %s: key state:%d\n", SECLOG, __func__, state);
+
+	return snprintf(buf, 5, "%d\n", state);
+}
+
+
+static DEVICE_ATTR(sec_powerkey_pressed, 0444, sysfs_powerkey_onoff_show, NULL);
+
 static int read_gen2_pon_off_reason(struct qpnp_pon *pon, u16 *reason,
 					int *reason_index_offset)
 {
@@ -2154,6 +2385,7 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 	struct qpnp_pon *pon;
 	unsigned int base;
 	struct device_node *node = NULL;
+	struct device *sec_powerkey;
 	u32 delay = 0, s3_debounce = 0;
 	int rc, sys_reset, index;
 	int reason_index_offset = 0;
@@ -2579,6 +2811,32 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 	pon->resin_shutdown_disable = of_property_read_bool(pdev->dev.of_node,
 					"qcom,resin-shutdown-disable");
 
+#if defined(CONFIG_DRV_SAMSUNG)
+	sec_powerkey = sec_device_create(8, NULL, "sec_powerkey");
+#else
+	sec_powerkey = device_create(sec_class, NULL, 8, NULL, "sec_powerkey");
+#endif
+	if (IS_ERR(sec_powerkey)) {
+		pr_err("Failed to create device(sec_powerkey)!\n");
+	} else {
+		rc = device_create_file(sec_powerkey, &dev_attr_sec_powerkey_pressed);
+		if (rc) {
+			pr_err("Failed to create device file in sysfs entries(%s)!\n",
+				dev_attr_sec_powerkey_pressed.attr.name);
+		}
+		dev_set_drvdata(sec_powerkey, pon);
+	}
+
+#ifdef CONFIG_SEC_BSP
+	rc = qpnp_pon_input_dispatch(pon, PON_RESIN);
+	if (rc)
+		dev_err(&pon->pdev->dev, "Unable to send input event\n");
+
+	rc = qpnp_pon_input_dispatch(pon, PON_KPDPWR);
+	if (rc)
+		dev_err(&pon->pdev->dev, "Unable to send input event\n");
+#endif
+
 	rc = device_create_file(&pdev->dev, &dev_attr_debounce_us);
 	if (rc) {
 		dev_err(&pdev->dev, "sys file creation failed rc: %d\n", rc);
@@ -2605,6 +2863,13 @@ static int qpnp_pon_probe(struct platform_device *pdev)
 
 	pon->legacy_hard_reset_offset = of_property_read_bool(pdev->dev.of_node,
 					"qcom,use-legacy-hard-reset-offset");
+
+	//+bug428206,wuyuexiu_wt,add,2019/1/24,add boardid into hardware info
+	probe_board_and_set();
+
+	//bug438403,wuyuexiu_wt,add,2019/4/16,add hardware id
+	probe_hardwareid_and_set();
+	printk("Add qpnp_pon_probe end\n");
 
 	qpnp_pon_debugfs_init(pdev);
 	return 0;

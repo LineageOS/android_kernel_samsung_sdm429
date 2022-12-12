@@ -46,6 +46,14 @@
 #include <asm/sysreg.h>
 #include <trace/events/exception.h>
 
+#ifdef CONFIG_SEC_DEBUG
+#include <linux/sec_debug.h>
+#include <linux/sec_debug_summary.h>
+#endif
+#ifdef CONFIG_USER_RESET_DEBUG
+#include <linux/sec_debug_user_reset.h>
+#endif
+
 static const char *handler[]= {
 	"Synchronous Abort",
 	"IRQ",
@@ -256,6 +264,16 @@ static int __die(const char *str, int err, struct pt_regs *regs)
 		 end_of_stack(tsk));
 
 	if (!user_mode(regs)) {
+#if 0 //#ifdef CONFIG_SEC_DEBUG
+		if (THREAD_SIZE + (unsigned long)task_stack_page(tsk) - regs->sp
+			> THREAD_SIZE) {
+			dump_mem(KERN_EMERG, "Stack: ", regs->sp,
+					THREAD_SIZE / 4 + regs->sp);
+		} else {
+			dump_mem(KERN_EMERG, "Stack: ", regs->sp, THREAD_SIZE
+					+ (unsigned long)task_stack_page(tsk));
+		}
+#endif
 		dump_backtrace(regs, tsk);
 		dump_instr(KERN_EMERG, regs);
 	}
@@ -327,6 +345,12 @@ void die(const char *str, struct pt_regs *regs, int err)
 	if (bug_type != BUG_TRAP_TYPE_NONE && !strlen(str))
 		str = "Oops - BUG";
 
+#ifdef CONFIG_SEC_DEBUG_SCHED_LOG
+	secdbg_sched_msg("!!die!!");
+#endif
+#ifdef CONFIG_SEC_DEBUG
+	sec_debug_save_die_info(str, regs);
+#endif
 	ret = __die(str, err, regs);
 
 	oops_end(flags, regs, ret);
@@ -800,6 +824,11 @@ const char *esr_get_class_string(u32 esr)
 asmlinkage void bad_mode(struct pt_regs *regs, int reason, unsigned int esr)
 {
 	console_verbose();
+
+#ifdef CONFIG_USER_RESET_DEBUG
+	sec_debug_save_badmode_info(reason, handler[reason],
+			esr, esr_get_class_string(esr));
+#endif
 
 	pr_crit("Bad mode in %s handler detected on CPU%d, code 0x%08x -- %s\n",
 		handler[reason], smp_processor_id(), esr,

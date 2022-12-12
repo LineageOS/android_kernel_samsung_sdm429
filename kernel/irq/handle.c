@@ -16,6 +16,11 @@
 #include <linux/interrupt.h>
 #include <linux/kernel_stat.h>
 
+#ifdef CONFIG_SEC_DEBUG
+#include <linux/sec_debug.h>
+#include <linux/sec_debug_summary.h>
+#endif
+
 #include <trace/events/irq.h>
 
 #include "internals.h"
@@ -141,10 +146,17 @@ irqreturn_t __handle_irq_event_percpu(struct irq_desc *desc, unsigned int *flags
 	for_each_action_of_desc(desc, action) {
 		irqreturn_t res;
 
+#ifdef CONFIG_SEC_DEBUG_SCHED_LOG
+		sec_debug_irq_sched_log(irq, action->handler,
+				(char *)action->name, IRQ_ENTRY);
+#endif
 		trace_irq_handler_entry(irq, action);
 		res = action->handler(irq, action->dev_id);
 		trace_irq_handler_exit(irq, action, res);
-
+#ifdef CONFIG_SEC_DEBUG_SCHED_LOG
+		sec_debug_irq_sched_log(irq, action->handler,
+				(char *)action->name, IRQ_EXIT);
+#endif
 		if (WARN_ONCE(!irqs_disabled(),"irq %u handler %pF enabled interrupts\n",
 			      irq, action->handler))
 			local_irq_disable();

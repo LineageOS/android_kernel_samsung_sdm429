@@ -772,6 +772,7 @@ gen_headers_out_arm = [
     "linux/netfilter/xt_cpu.h",
     "linux/netfilter/xt_dccp.h",
     "linux/netfilter/xt_devgroup.h",
+	"linux/netfilter/xt_domainfilter.h",
     "linux/netfilter/xt_dscp.h",
     "linux/netfilter/xt_ecn.h",
     "linux/netfilter/xt_esp.h",

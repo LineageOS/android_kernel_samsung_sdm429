@@ -269,6 +269,15 @@ static int _create_phy_ctrl_nodes(struct mdss_panel_debugfs_info *debugfs_info,
 			     pinfo->mipi.dsi_phy_db.lanecfg);
 	DEBUGFS_CREATE_ARRAY("timing", phy_node,
 			     pinfo->mipi.dsi_phy_db.timing);
+	//+bug 600732, wangcong.wt, modify, 2020/11/11, Add LCD phy_timing_12nm debug info
+	DEBUGFS_CREATE_ARRAY("phy_timing_12nm", phy_node,
+			     pinfo->mipi.dsi_phy_db.timing_12nm);
+	//-bug 600732, wangcong.wt, modify, 2020/11/11, Add LCD phy_timing_12nm debug info
+
+	//+bug 600732, wangcong.wt, modify, 2020/11/11, Add Lcd mipi clk info
+	DEBUGFS_CREATE_ARRAY("timing_8996", phy_node,
+			     pinfo->mipi.dsi_phy_db.timing_8996);
+	//-bug 600732, wangcong.wt, modify, 2020/11/11, Add Lcd mipi clk info
 
 	return 0;
 }

@@ -40,7 +40,8 @@
 #include "qg-battery-profile.h"
 #include "qg-defs.h"
 
-static int qg_debug_mask;
+//Bug 435897,caijiaqi.wt,MODIFIY,20190328,remove unnecessary logger in kmsg
+static int qg_debug_mask = QG_DEBUG_PON |QG_DEBUG_IRQ;
 module_param_named(
 	debug_mask, qg_debug_mask, int, 0600
 );
@@ -1883,6 +1884,8 @@ static const struct power_supply_desc qg_psy_desc = {
 };
 
 #define DEFAULT_RECHARGE_SOC 95
+//+Bug 600732,xushengjuan.wt,modify,20201118,S86117,batter for recharge
+#ifndef CONFIG_ARCH_MSM8953
 static int qg_charge_full_update(struct qpnp_qg *chip)
 {
 	union power_supply_propval prop = {0, };
@@ -1915,6 +1918,17 @@ static int qg_charge_full_update(struct qpnp_qg *chip)
 	if (chip->charge_done && !chip->charge_full) {
 		if (chip->msoc >= 99 && health == POWER_SUPPLY_HEALTH_GOOD) {
 			chip->charge_full = true;
+			//+Bug 600732,xushengjuan.wt,modify,20201118,S86117,modifiy quick recharger
+			chip->msoc = 100;
+			rc = qg_write_monotonic_soc(chip, chip->msoc);
+			if (rc < 0)
+				pr_err("WT Failed to update MSOC register rc=%d\n", rc);
+			/* update SDAM with the new MSOC */
+			chip->sdam_data[SDAM_SOC] = chip->msoc;
+			rc = qg_sdam_write(SDAM_SOC, chip->msoc);
+			if (rc < 0)
+				pr_err("WT Failed to update SDAM with MSOC rc=%d\n", rc);
+			//-Bug 600732,xushengjuan.wt,modify,20201118,S86117,modifiy quick recharger
 			qg_dbg(chip, QG_DEBUG_STATUS, "Setting charge_full (0->1) @ msoc=%d\n",
 					chip->msoc);
 		} else if (health != POWER_SUPPLY_HEALTH_GOOD) {
@@ -1972,6 +1986,104 @@ static int qg_charge_full_update(struct qpnp_qg *chip)
 out:
 	return 0;
 }
+#else
+static int qg_charge_full_update(struct qpnp_qg *chip)
+{
+        union power_supply_propval prop = {0, };
+        int rc, recharge_soc, health;
+
+        if (!chip->dt.hold_soc_while_full)
+                goto out;
+
+        rc = power_supply_get_property(chip->batt_psy,
+                        POWER_SUPPLY_PROP_HEALTH, &prop);
+        if (rc < 0) {
+                pr_err("Failed to get battery health, rc=%d\n", rc);
+                goto out;
+        }
+        health = prop.intval;
+
+        rc = power_supply_get_property(chip->batt_psy,
+                POWER_SUPPLY_PROP_RECHARGE_SOC, &prop);
+        if (rc < 0 || prop.intval < 0) {
+                pr_debug("Failed to get recharge-soc\n");
+                recharge_soc = DEFAULT_RECHARGE_SOC;
+        }
+        recharge_soc = prop.intval;
+        chip->recharge_soc = recharge_soc;
+
+        qg_dbg(chip, QG_DEBUG_STATUS, "msoc=%d health=%d charge_full=%d charge_done=%d\n",
+                                chip->msoc, health, chip->charge_full,
+                                chip->charge_done);
+        if (chip->charge_done && !chip->charge_full) {
+                if (chip->msoc >= 99 && health == POWER_SUPPLY_HEALTH_GOOD) {
+                        chip->charge_full = true;
+                        qg_dbg(chip, QG_DEBUG_STATUS, "Setting charge_full (0->1) @ msoc=%d\n",
+                                                chip->msoc);
+        } else if (health != POWER_SUPPLY_HEALTH_GOOD) {
+                        /* terminated in JEITA */
+                        qg_dbg(chip, QG_DEBUG_STATUS, "Terminated charging @ msoc=%d\n",
+                                  chip->msoc);
+                }
+        } else if (((!chip->charge_done || chip->msoc <= recharge_soc) && chip->charge_full) ||
+                        (chip->udata.param[QG_SOC].valid && chip->udata.param[QG_SOC].data <= 97 &&
+                        FULL_SOC == chip->msoc && chip->charge_status == POWER_SUPPLY_STATUS_FULL)) {
+
+                bool usb_present = is_usb_present(chip);
+
+                /*
+                 * force a recharge only if SOC <= recharge SOC and
+                 * we have not started charging.
+                 */
+                if ((chip->wa_flags & QG_RECHARGE_SOC_WA) && usb_present && (chip->msoc <= recharge_soc ||
+                        (chip->udata.param[QG_SOC].valid && chip->udata.param[QG_SOC].data <= 97 &&
+                        FULL_SOC == chip->msoc)) && chip->charge_status != POWER_SUPPLY_STATUS_CHARGING) {
+                        /* Force recharge */
+                        prop.intval = 0;
+                        rc = power_supply_set_property(chip->batt_psy,
+                                POWER_SUPPLY_PROP_RECHARGE_SOC, &prop);
+                                if (rc < 0)
+                        pr_err("Failed to force recharge rc=%d\n", rc);
+                        else
+                                qg_dbg(chip, QG_DEBUG_STATUS, "Forced recharge\n");
+                }
+
+                if (chip->charge_done)
+                        return 0;	/* wait for recharge */
+
+                /*
+                 * If SOC has indeed dropped below recharge-SOC or
+                 * the USB is removed, if linearize-soc is set scale
+                 * msoc from 100% for better UX.
+                 */
+                if (chip->msoc < recharge_soc || !usb_present) {
+                        if (chip->dt.linearize_soc) {
+                                get_rtc_time(&chip->last_maint_soc_update_time);
+                                chip->maint_soc = FULL_SOC;
+                                qg_scale_soc(chip, false);
+                        }
+                        chip->charge_full = false;
+                        qg_dbg(chip, QG_DEBUG_STATUS, "msoc=%d recharge_soc=%d charge_full (1->0)\n",
+                                        chip->msoc, recharge_soc);
+                } else {			/* continue with charge_full state */
+                        qg_dbg(chip, QG_DEBUG_STATUS, "msoc=%d recharge_soc=%d charge_full=%d usb_present=%d\n",
+                                        chip->msoc, recharge_soc,
+                                        chip->charge_full, usb_present);
+                }
+        } else if ((chip->msoc < FULL_SOC) && chip->charge_status == POWER_SUPPLY_STATUS_FULL) {
+                        prop.intval = 0;
+                        rc = power_supply_set_property(chip->batt_psy,
+                                        POWER_SUPPLY_PROP_RECHARGE_SOC, &prop);
+                        if (rc < 0)
+                                pr_err("WT Failed to force recharge rc=%d\n", rc);
+                        else
+                                qg_dbg(chip, QG_DEBUG_STATUS, "WT Forced recharge\n");
+        }
+out:
+        return 0;
+}
+#endif
+//+Bug 600732,xushengjuan.wt,modify,20201118,S86117,batter for recharge
 
 static int qg_parallel_status_update(struct qpnp_qg *chip)
 {
@@ -2520,6 +2632,13 @@ static int qg_load_battery_profile(struct qpnp_qg *chip)
 		chip->bp.fastchg_curr_ma = -EINVAL;
 	}
 
+//+Bug 600732,xushengjuan.wt,modify,20201118,S86117,charger bring up
+#ifdef CONFIG_DISABLE_TEMP_PROTECT
+		chip->bp.float_volt_uv = 4100000;
+		chip->bp.fastchg_curr_ma = 1500;
+#endif
+//-Bug 600732,xushengjuan.wt,modify,20201118,S86117,charger bring up
+
 	rc = of_property_read_u32(profile_node, "qcom,qg-batt-profile-ver",
 				&chip->bp.qg_profile_version);
 	if (rc < 0) {
@@ -2732,6 +2851,15 @@ done:
 		return rc;
 	}
 
+        //+Bug 600732,xushengjuan.wt,modify,20201118,S86117,batter for recharge
+        #ifdef CONFIG_ARCH_MSM8953
+        if(abs(soc - shutdown[SDAM_SOC]) <= 10) {
+                ocv_uv = shutdown[SDAM_OCV_UV];
+                soc = shutdown[SDAM_SOC];
+        qg_dbg(chip, QG_DEBUG_PON, "WT Using SHUTDOWN_SOC @ PON\n");
+        }
+        #endif
+        //-Bug 600732,xushengjuan.wt,modify,20201118,S86117,batter for recharge
 	chip->last_adj_ssoc = chip->catch_up_soc = chip->msoc = soc;
 	chip->kdata.param[QG_PON_OCV_UV].data = ocv_uv;
 	chip->kdata.param[QG_PON_OCV_UV].valid = true;

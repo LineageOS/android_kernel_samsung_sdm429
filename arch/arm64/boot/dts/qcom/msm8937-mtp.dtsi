@@ -125,6 +125,8 @@
 		pinctrl-names = "default";
 		pinctrl-0 = <&gpio_key_active>;
 
+		/*+bug601075, huangzheng1.wt, modify,2020/11/20,modify for p81081 bringup camera*/
+		/*
 		camera_focus {
 			label = "camera_focus";
 			gpios = <&tlmm 128 0x1>;
@@ -134,6 +136,8 @@
 			linux,can-disable;
 			gpio-key,wakeup;
 		};
+		*/
+		/*-bug601075, huangzheng1.wt, modify,2020/11/20,modify for p81081 bringup camera*/
 
 		camera_snapshot {
 			label = "camera_snapshot";

@@ -695,7 +695,7 @@ static int mmc_decode_ext_csd(struct mmc_card *card, u8 *ext_csd)
 	/* eMMC v5 or later */
 	if (card->ext_csd.rev >= 7) {
 		memcpy(card->ext_csd.fwrev, &ext_csd[EXT_CSD_FIRMWARE_VERSION],
-		       MMC_FIRMWARE_LEN);
+				MMC_FIRMWARE_LEN);
 		card->ext_csd.ffu_capable =
 			(ext_csd[EXT_CSD_SUPPORTED_MODE] & 0x1) &&
 			!(ext_csd[EXT_CSD_FW_CONFIG] & 0x1);
@@ -832,6 +832,37 @@ static int mmc_compare_ext_csds(struct mmc_card *card, unsigned bus_width)
 	return err;
 }
 
+static char un_buf[21];
+#define UN_LENGTH 20
+static int __init un_boot_state_param(char *line)
+{
+	if (strlen(line) == UN_LENGTH)
+		strncpy(un_buf, line, UN_LENGTH);
+
+	return 1;
+}
+__setup("androidboot.un=", un_boot_state_param);
+
+static ssize_t mmc_gen_unique_number_show(struct device *dev,
+		struct device_attribute *attr,
+		char *buf)
+{
+	struct mmc_card *card = mmc_dev_to_card(dev);
+	ssize_t n = 0;
+
+	n = sprintf(buf, "W%02X%02X%02X%X%02X%08X%02X\n",
+			card->cid.manfid, card->cid.prod_name[0], card->cid.prod_name[1],
+			card->cid.prod_name[2]>>4, card->cid.prv, card->cid.serial,
+			UNSTUFF_BITS(card->raw_cid, 8, 8));
+
+	if (strncmp(un_buf, buf, UN_LENGTH) != 0) {
+		pr_info("%s: eMMC UN mismatch\n", __func__);
+		BUG_ON(1);
+	}
+
+	return n;
+}
+
 MMC_DEV_ATTR(cid, "%08x%08x%08x%08x\n", card->raw_cid[0], card->raw_cid[1],
 	card->raw_cid[2], card->raw_cid[3]);
 MMC_DEV_ATTR(csd, "%08x%08x%08x%08x\n", card->raw_csd[0], card->raw_csd[1],
@@ -850,6 +881,8 @@ MMC_DEV_ATTR(pre_eol_info, "%02x\n", card->ext_csd.pre_eol_info);
 MMC_DEV_ATTR(life_time, "0x%02x 0x%02x\n",
 	card->ext_csd.device_life_time_est_typ_a,
 	card->ext_csd.device_life_time_est_typ_b);
+MMC_DEV_ATTR(life_time_est_typ_a, "0x%02x\n",card->ext_csd.device_life_time_est_typ_a);//bug 604729, jinyushun.wt, add, 20201130,add life_time_a node
+MMC_DEV_ATTR(life_time_est_typ_b, "0x%02x\n",card->ext_csd.device_life_time_est_typ_b);//bug 604729, jinyushun.wt, add, 20201130,add life_time_b node
 MMC_DEV_ATTR(serial, "0x%08x\n", card->cid.serial);
 MMC_DEV_ATTR(enhanced_area_offset, "%llu\n",
 		card->ext_csd.enhanced_area_offset);
@@ -874,7 +907,134 @@ static ssize_t mmc_fwrev_show(struct device *dev,
 	}
 }
 
+static DEVICE_ATTR(unique_number, (S_IRUSR|S_IRGRP), mmc_gen_unique_number_show, NULL);
 static DEVICE_ATTR(fwrev, S_IRUGO, mmc_fwrev_show, NULL);
+
+//+bug 600748,jinyushun.wt,add,20201123,add flash_name node
+static int calc_mem_size(void)
+{
+	int temp_size;
+	temp_size = (int)totalram_pages/1024; //page size 4K
+
+	if ((temp_size > 0*256) && (temp_size <= 1*256))
+		return 1;
+	else if ((temp_size > 1*256) && (temp_size <= 2*256))
+		return 2;
+	else if ((temp_size > 2*256) && (temp_size <= 3*256))
+		return 3;
+	else if ((temp_size > 3*256) && (temp_size <= 4*256))
+		return 4;
+	else if ((temp_size > 4*256) && (temp_size <= 6*256))
+		return 6;
+	else if ((temp_size > 6*256) && (temp_size <= 8*256))
+		return 8;
+	else
+		return 0;
+}
+
+static int calc_mmc_size(struct mmc_card *card)
+{
+	int temp_size;
+	temp_size = (int)card->ext_csd.sectors/2/1024/1024; //sector size 512B
+
+	if ((temp_size > 8) && (temp_size <= 16))
+		return 16;
+	else if ((temp_size > 16) && (temp_size <= 32))
+		return 32;
+	else if ((temp_size > 32) && (temp_size <= 64))
+		return 64;
+	else if ((temp_size > 64) && (temp_size <= 128))
+		return 128;
+	else if ((temp_size > 128) && (temp_size <= 256))
+		return 256;
+	else
+		return 0;
+}
+
+static ssize_t flash_name_show(struct device *dev,
+	struct device_attribute *attr,
+	char *buf)
+{
+	struct mmc_card *card = mmc_dev_to_card(dev);
+	char *vendor_name = NULL;
+	char *emcp_name = NULL;
+
+	switch (card->cid.manfid) {
+		case 0x11:
+			vendor_name = "Toshiba";
+			break;
+		case 0x13:
+			vendor_name = "Micron";
+			break;
+		case 0x15:
+			vendor_name = "Samsung";
+			if (strncmp(card->cid.prod_name, "QE63MB", strlen("QE63MB")) == 0)
+				emcp_name = "KMQE60013M-B318";
+			else if (strncmp(card->cid.prod_name, "QD63MB", strlen("QD63MB")) == 0)
+				emcp_name = "KMQD60013M-B318";
+			else if (strncmp(card->cid.prod_name, "GD6BMB", strlen("GD6BMB")) == 0)
+				emcp_name = "KMGD6001BM-B421";
+			else if (strncmp(card->cid.prod_name, "RP64MB", strlen("RP64MB")) == 0)
+				emcp_name = "KMRP60014M-B614";
+			//chk 40705, liangxiaoqin.wt,add,20201214, add flash name
+			else if (strncmp(card->cid.prod_name, "GP6BMB", strlen("GP6BMB")) == 0)
+				emcp_name = "KMGP6001BM-B514";
+            else if (strncmp(card->cid.prod_name, "GP6BAB", strlen("GP6BAB")) == 0)
+				emcp_name = "KMGP6001BA-B514";
+			else if (strncmp(card->cid.prod_name, "GX6BMB", strlen("GX6BMB")) == 0)
+				emcp_name = "KMGX6001BM-B514";
+			else if (strncmp(card->cid.prod_name, "GX6BAB", strlen("GX6BAB")) == 0)
+				emcp_name = "KMGX6001BA-B514";
+			//chk 40776, liangxiaoqin.wt,add,20201214, add flash name
+			else if (strncmp(card->cid.prod_name, "QX63AB", strlen("QX63AB")) == 0)
+				emcp_name = "KMQX60013A-B419";
+			//chk 40784, liangxiaoqin.wt,add,20201214, add flash name
+			else if (strncmp(card->cid.prod_name, "QX63MB", strlen("QX63MB")) == 0)
+				emcp_name = "KMQX60013M-B419";
+			else
+				emcp_name = NULL;
+			break;
+		case 0x45:
+			vendor_name = "Sandisk";
+			break;
+		case 0x90:
+			vendor_name = "Hynix";
+			if (strncmp(card->cid.prod_name, "HAG4a2", strlen("HAG4a2")) == 0)
+				emcp_name = "H9TQ17ABJTCCUR-KUM";
+			else if (strncmp(card->cid.prod_name, "HCG8a4", strlen("HCG8a4")) == 0)
+				emcp_name = "H9TQ52ACLTMCUR-KUM";
+			else if (strncmp(card->cid.prod_name, "hB8aP>", strlen("hB8aP>")) == 0)
+				emcp_name = "H9TQ27ADFTMCUR-KUM";
+			else
+				emcp_name = NULL;
+			break;
+		case 0x70:
+			vendor_name = "Kingston";
+			if (strncmp(card->cid.prod_name, "FMAGEA", strlen("FMAGEA")) == 0)
+				emcp_name = "16EMCP16-EL3GTB28";
+			else if (strncmp(card->cid.prod_name, "FMBGEA", strlen("FMBGEA")) == 0)
+				emcp_name = "32EMCP16-EL3GTA28";
+            //chk 40477, liangxiaoqin.wt,add,20201223, add flash name
+            else if (strncmp(card->cid.prod_name, "FMBCEA", strlen("FMBCEA")) == 0)
+				emcp_name = "32EMCP16-EL3DTA28";
+			else if (strncmp(card->cid.prod_name, "FMBCJC", strlen("FMBCJC")) == 0)
+				emcp_name = "32EMCP24-EL3FTA28";
+			else
+				emcp_name = NULL;
+			break;
+		default:
+			vendor_name = "Unknown";
+			break;
+	}
+
+	if (emcp_name == NULL)
+		emcp_name = card->cid.prod_name;
+	return sprintf(buf, "%s_%s_%dGB_%dGB\n",vendor_name, emcp_name, calc_mem_size(), calc_mmc_size(card));
+}
+
+static DEVICE_ATTR(flash_name, S_IRUGO, flash_name_show, NULL);
+//-bug 600748,jinyushun.wt,add,20201123,add flash_name node
+
 
 static ssize_t mmc_dsr_show(struct device *dev,
 			    struct device_attribute *attr,
@@ -908,6 +1068,8 @@ static struct attribute *mmc_std_attrs[] = {
 	&dev_attr_rev.attr,
 	&dev_attr_pre_eol_info.attr,
 	&dev_attr_life_time.attr,
+	&dev_attr_life_time_est_typ_a.attr,      //bug 604729, jinyushun.wt, add, 20201130,add life_time_a node
+	&dev_attr_life_time_est_typ_b.attr,      //bug 604729, jinyushun.wt, add, 20201130,add life_time_b node
 	&dev_attr_serial.attr,
 	&dev_attr_enhanced_area_offset.attr,
 	&dev_attr_enhanced_area_size.attr,
@@ -916,6 +1078,8 @@ static struct attribute *mmc_std_attrs[] = {
 	&dev_attr_rel_sectors.attr,
 	&dev_attr_ocr.attr,
 	&dev_attr_dsr.attr,
+	&dev_attr_flash_name.attr, //bug 600748,jinyushun.wt,add,20201123,add flash_name node
+	&dev_attr_unique_number.attr,
 	NULL,
 };
 ATTRIBUTE_GROUPS(mmc_std);

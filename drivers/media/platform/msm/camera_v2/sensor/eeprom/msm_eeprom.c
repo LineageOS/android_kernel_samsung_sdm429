@@ -26,6 +26,8 @@ DEFINE_MSM_MUTEX(msm_eeprom_mutex);
 static struct v4l2_file_operations msm_eeprom_v4l2_subdev_fops;
 #endif
 
+extern void msm_sensor_set_info(int event,void* buf);//bug 600732,huangguoyong.wt, add,2020/11/16,86118 project camera kernel code for bring up(add for set sensor information)
+
 /*
  * msm_get_read_mem_size - Get the total size for allocation
  * @eeprom_map_array:	mem map
@@ -54,10 +56,9 @@ static int msm_get_read_mem_size
 			return -EINVAL;
 		}
 		for (i = 0; i < eeprom_map->memory_map_size; i++) {
-			if ((eeprom_map->mem_settings[i].i2c_operation ==
-				MSM_CAM_READ) ||
-				(eeprom_map->mem_settings[i].i2c_operation ==
-				MSM_CAM_READ_LOOP)) {
+			if (eeprom_map->mem_settings[i].i2c_operation ==
+				MSM_CAM_READ || eeprom_map->mem_settings[i].i2c_operation ==
+				MSM_CAM_SINGLE_LOOP_READ) {//bug 600732,huangguoyong.wt, add,2020/11/16,86118 project camera kernel code for bring up(add loop read ops)
 				size += eeprom_map->mem_settings[i].reg_data;
 			}
 		}
@@ -327,10 +328,8 @@ ERROR:
 static int eeprom_parse_memory_map(struct msm_eeprom_ctrl_t *e_ctrl,
 	struct msm_eeprom_memory_map_array *eeprom_map_array)
 {
-	int rc =  0, i, j, gc;
+	int rc =  0, i, j;
 	uint8_t *memptr;
-	uint16_t gc_read = 0;
-
 	struct msm_eeprom_mem_map_t *eeprom_map;
 
 	e_ctrl->cal_data.mapdata = NULL;
@@ -394,62 +393,73 @@ static int eeprom_parse_memory_map(struct msm_eeprom_ctrl_t *e_ctrl,
 			}
 			break;
 			case MSM_CAM_READ: {
+			//++bug 600732,huangguoyong.wt, add,2020/11/16,86118 project camera kernel code for bring up(for hi556 read otp)
+				uint16_t m;
+				uint16_t read_val = 0;
 				e_ctrl->i2c_client.addr_type =
-					eeprom_map->mem_settings[i].addr_type;
-				rc = e_ctrl->i2c_client.i2c_func_tbl->
+				eeprom_map->mem_settings[i].addr_type;
+				if((e_ctrl->cci_master == 1)&&(eeprom_map->mem_settings[i].reg_addr == 0x0108)){
+					for (m = 0; m < eeprom_map->mem_settings[i].reg_data;m++)
+					{
+						rc = e_ctrl->i2c_client.i2c_func_tbl->i2c_read(&(e_ctrl->i2c_client),
+						eeprom_map->mem_settings[i].reg_addr,&read_val,
+						eeprom_map->mem_settings[i].data_type);
+						if (rc < 0) {
+							pr_err("%s: read failed\n",__func__);
+							goto clean_up;
+						}
+					*memptr = (uint8_t) read_val;
+					memptr++;
+					}
+				}else{
+					rc = e_ctrl->i2c_client.i2c_func_tbl->
 					i2c_read_seq(&(e_ctrl->i2c_client),
 					eeprom_map->mem_settings[i].reg_addr,
 					memptr,
 					eeprom_map->mem_settings[i].reg_data);
-				msleep(eeprom_map->mem_settings[i].delay);
-				if (rc < 0) {
-					pr_err("%s: read failed\n",
-						__func__);
-					goto clean_up;
-				}
-				memptr += eeprom_map->mem_settings[i].reg_data;
-			}
-			break;
-
-			case MSM_CAM_READ_LOOP: {
-				e_ctrl->i2c_client.addr_type =
-				 eeprom_map->mem_settings[i].addr_type;
-
-				for (gc = 0;
-					gc < eeprom_map->mem_settings[i].
-						reg_data;
-					gc++) {
-					msleep(eeprom_map->mem_settings[i].
-						delay);
-					rc = e_ctrl->i2c_client.i2c_func_tbl->
-						i2c_read(
-						&(e_ctrl->i2c_client),
-						eeprom_map->mem_settings[i].
-						reg_addr,
-						&gc_read,
-						eeprom_map->mem_settings[i].
-						data_type);
 					if (rc < 0) {
 						pr_err("%s: read failed\n",
-							__func__);
+						__func__);
 						goto clean_up;
 					}
-					*memptr = (uint8_t)gc_read;
-					memptr++;
+					memptr += eeprom_map->mem_settings[i].reg_data;
 				}
+				msleep(eeprom_map->mem_settings[i].delay);
 			}
 			break;
-
+			//-bug 600732,huangguoyong.wt, add,2020/11/16,86118 project camera kernel code for bring up(for hi556 read otp)
+			//+bug 600732,huangguoyong.wt, add,2020/11/16,86118 project camera kernel code for bring up(add loop read ops)
+			case MSM_CAM_SINGLE_LOOP_READ: {
+				uint16_t m;
+				uint16_t read_val = 0;
+				e_ctrl->i2c_client.addr_type =
+				eeprom_map->mem_settings[i].addr_type;
+				for (m = 0; m < eeprom_map->mem_settings[i].reg_data;m++) {
+					rc = e_ctrl->i2c_client.i2c_func_tbl->
+					i2c_read(&(e_ctrl->i2c_client),
+					eeprom_map->mem_settings[i].reg_addr,
+					&read_val,
+					eeprom_map->mem_settings[i].data_type);
+					if (rc < 0) {
+						pr_err("%s: read failed\n",__func__);
+						goto clean_up;
+					}
+					*memptr = (uint8_t) read_val;
+					memptr++;
+				}
+				msleep(eeprom_map->mem_settings[i].delay);
+			}
+			//-bug 600732,huangguoyong.wt, add,2020/11/16,86118 project camera kernel code for bring up(add loop read ops)
+			break;
 			default:
-				pr_err("%s: %d Invalid i2c operation LC:%d, op: %d\n",
-					__func__, __LINE__, i,
-					eeprom_map->mem_settings[i].
-						i2c_operation);
+				pr_err("%s: %d Invalid i2c operation LC:%d\n",
+					__func__, __LINE__, i);
 				return -EINVAL;
 			}
 		}
 	}
 	memptr = e_ctrl->cal_data.mapdata;
+	msm_sensor_set_info((e_ctrl->subdev_id+0x10),(void*)memptr);//bug 600732,huangguoyong.wt, add,2020/11/16,86118 project camera kernel code for bring up(add forset sensor information)
 	for (i = 0; i < e_ctrl->cal_data.num_data; i++)
 		CDBG("memory_data[%d] = 0x%X\n", i, memptr[i]);
 	return rc;
