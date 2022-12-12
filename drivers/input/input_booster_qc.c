@@ -126,7 +126,7 @@ void ib_set_booster(int *qos_values)
 			break;
 		case HMPBOOST:
 			set_hmp(value);
-			pr_booster("%s :: hmpboost value : %ld", __func__, value);
+			pr_booster("%s :: hmpboost value : %d", __func__, value);
 			break;
 		default:
 			pr_booster("%s :: res_type : %d is not used", __func__, res_type);
