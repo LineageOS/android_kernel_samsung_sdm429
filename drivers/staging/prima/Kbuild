@@ -9,7 +9,13 @@ endif
 ifeq ($(KERNEL_BUILD),1)
 	# These are provided in Android-based builds
 	# Need to explicitly define for Kernel-based builds
+ifeq ($(CONFIG_PRONTO_WLAN),m)
+	MODNAME := pronto_wlan
+else ifeq ($(CONFIG_PRIMA_WLAN),m)
+	MODNAME := prima_wlan
+else
 	MODNAME := wlan
+endif
 	WLAN_ROOT := drivers/staging/prima
 endif
 
