@@ -73,15 +73,15 @@ struct aw87319_t{
     struct hrtimer cfg_timer;
     struct work_struct cfg_work;
 };
-struct aw87319_t *aw87319;
+static struct aw87319_t *aw87319;
 
 struct aw87319_container{
     int len;
     unsigned char data[];
 };
-struct aw87319_container *aw87319_spk_cnt;
-struct aw87319_container *aw87319_vspk_cnt;
-struct aw87319_container *aw87319_rcv_cnt;
+static struct aw87319_container *aw87319_spk_cnt;
+static struct aw87319_container *aw87319_vspk_cnt;
+static struct aw87319_container *aw87319_rcv_cnt;
 
 static char *aw87319_spk_name = "aw87319l_spk.bin";
 static char *aw87319_vspk_name = "aw87319l_vspk.bin";
