@@ -1303,6 +1303,47 @@ static ssize_t gesture_control_store(struct device *dev,
 }
 
 static DEVICE_ATTR_RW(gesture_control);
+
+static ssize_t tap2wake_show(struct device *dev,
+				    struct device_attribute *attr, char *buf)
+{
+	struct touch_info_dev *tid = dev_to_tid(dev);
+
+	return scnprintf(buf, PAGE_SIZE, "%d\n", atomic_read(&tid->p->mask) & BIT(GS_KEY_DOUBLE_TAP));
+}
+
+static ssize_t tap2wake_store(struct device *dev,
+				     struct device_attribute *attr,
+				     const char *buf, size_t count)
+{
+	int status = 0;
+	unsigned int mask = 0;
+	int ret;
+	sscanf(buf, "%d", &status);
+
+	if (status < 0 || status > 1) {
+		dev_dbg(dev, "invalid tap2wake status(%d)\n", status);
+		return -EINVAL;
+	}
+
+	switch(status) {
+		case 0:
+			mask = 0;
+			break;
+		case 1:
+			mask = BIT(GS_KEY_ENABLE) | BIT(GS_KEY_DOUBLE_TAP);
+			break;
+		default:
+			dev_dbg(dev, "invalid tap2wake status(%d)\n", status);
+			return -EINVAL;
+	}
+	ret = gesture_set_capability(dev, mask);
+
+	return ret ? : count;
+}
+
+static DEVICE_ATTR_RW(tap2wake);
+
 #endif /* CONFIG_TOUCHSCREEN_TID_GESTURE_SUPPORT */
 
 static struct attribute *touch_info_dev_attrs[] = {
@@ -1335,6 +1376,7 @@ static struct attribute *touch_info_dev_attrs[] = {
 	&dev_attr_gesture_data.attr,
 	&dev_attr_gesture_name.attr,
 	&dev_attr_gesture_control.attr,
+	&dev_attr_tap2wake.attr,
 #endif
 	NULL,
 };
