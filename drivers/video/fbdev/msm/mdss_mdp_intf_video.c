@@ -331,13 +331,26 @@ static int mdss_mdp_video_intf_recovery(void *data, int event)
 	 * supported for recovery sequence for video
 	 * mode DSI interface
 	 */
+	//+Bug601075, shenwenbin.wt, modify, 20201230 mv N8_Q code to N8_R
+	ctx = ctl->intf_ctx[MASTER_CTX];
+
+	#ifdef CONFIG_ARCH_MSM8937
+	if (event == MDP_INTF_DSI_CMD_FIFO_UNDERFLOW) {
+		/*pr_warn("%s: unsupported recovery event:%d\n",
+					__func__, event);
+		return -EPERM;*/
+		pr_warn("%s: unsupported recovery event:%d, run panel dead recovery process!\n", __func__, event);
+		mdss_fb_report_panel_dead(ctx->ctl->mfd);
+		return 0; 
+	}
+	#else
 	if (event == MDP_INTF_DSI_CMD_FIFO_UNDERFLOW) {
 		pr_warn("%s: unsupported recovery event:%d\n",
 					__func__, event);
 		return -EPERM;
 	}
-
-	ctx = ctl->intf_ctx[MASTER_CTX];
+	#endif
+	//-Bug601075, shenwenbin.wt, modify, 20201230 mv N8_Q code to N8_R
 	pr_debug("%s: ctl num = %d, event = %d\n",
 				__func__, ctl->num, event);
 

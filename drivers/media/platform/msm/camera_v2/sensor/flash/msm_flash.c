@@ -1265,6 +1265,7 @@ static long msm_flash_subdev_fops_ioctl(struct file *file,
 	return video_usercopy(file, cmd, arg, msm_flash_subdev_do_ioctl);
 }
 #endif
+
 static int32_t msm_flash_platform_probe(struct platform_device *pdev)
 {
 	int32_t rc = 0;

@@ -1915,6 +1915,17 @@ static int qg_charge_full_update(struct qpnp_qg *chip)
 	if (chip->charge_done && !chip->charge_full) {
 		if (chip->msoc >= 99 && health == POWER_SUPPLY_HEALTH_GOOD) {
 			chip->charge_full = true;
+			//+Bug 600732,xushengjuan.wt,modify,20201118,S86117,modifiy quick recharger
+			chip->msoc = 100;
+			rc = qg_write_monotonic_soc(chip, chip->msoc);
+			if (rc < 0)
+				pr_err("WT Failed to update MSOC register rc=%d\n", rc);
+			/* update SDAM with the new MSOC */
+			chip->sdam_data[SDAM_SOC] = chip->msoc;
+			rc = qg_sdam_write(SDAM_SOC, chip->msoc);
+			if (rc < 0)
+				pr_err("WT Failed to update SDAM with MSOC rc=%d\n", rc);
+			//-Bug 600732,xushengjuan.wt,modify,20201118,S86117,modifiy quick recharger
 			qg_dbg(chip, QG_DEBUG_STATUS, "Setting charge_full (0->1) @ msoc=%d\n",
 					chip->msoc);
 		} else if (health != POWER_SUPPLY_HEALTH_GOOD) {

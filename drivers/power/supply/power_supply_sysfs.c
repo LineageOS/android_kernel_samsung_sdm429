@@ -341,6 +341,13 @@ static struct device_attribute power_supply_attrs[] = {
 	POWER_SUPPLY_ATTR(soh),
 	POWER_SUPPLY_ATTR(qc_opti_disable),
 	POWER_SUPPLY_ATTR(fcc_stepper_enable),
+	//+Bug 600732,xushengjuan.wt,modify,20201118,S86117,add nodes
+	//+Bug 437373 caijiaqi.wt, ADD,20190409,P81081 add battery node for customer
+	POWER_SUPPLY_ATTR(batt_current_event),
+	//Bug 439628 caijiaqi.wt,MODIFIY,20190423,modifiy node name batt_mise_event to batt_misc_event
+	POWER_SUPPLY_ATTR(batt_misc_event),
+	//-Bug 437373 caijiaqi.wt, ADD,20190409,P81081 add battery node for customer
+	//-Bug 600732,xushengjuan.wt,modify,20201118,S86117,add nodes
 	POWER_SUPPLY_ATTR(cc_soc),
 	POWER_SUPPLY_ATTR(qg_vbms_mode),
 	POWER_SUPPLY_ATTR(real_capacity),

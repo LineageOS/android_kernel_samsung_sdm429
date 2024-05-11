@@ -1,0 +1,89 @@
+# When adding new entries keep the list in alphabetical order
+
+comment "Samsung Debugging Feature"
+menuconfig SEC_DEBUG
+	bool "Samsung TN Ramdump Feature"
+	default y
+	help
+	  Samsung TN Ramdump Feature.
+	  Enables collection of ram dump.
+	  Enables task history, debug level etc.
+	  This feature is enabled in defconfig.
+
+if SEC_DEBUG
+
+config SEC_DEBUG_PRINTK_NOCACHE
+	bool "Samsung non-cached kernel printk"
+	default y
+	help
+	  Samsung non-cached kernel printk
+	  This ensures that printk is never stale
+	  which is a good feature when debugging without
+	  hardware debuggers. If unsure, keep it turned on.
+
+config SEC_DEBUG_SCHED_LOG
+	bool "Samsung Scheduler Logging Feature"
+	default n
+	help
+	  Samsung Scheduler Logging Feature for Debug use.
+	  Enables task scheduling history.
+	  Enables IRQ scheduling history.
+	  This feature is enabled in defconfig.
+
+config SEC_DEBUG_USER
+	bool "Panic on Userspace fault"
+	default y
+	help
+	  Panic on Userspace fault
+	  This feature enables collection of ram dump,
+	  on user fault.
+	  Enabled native code debugging.
+
+config SEC_DEBUG_SUMMARY
+	bool "Debug summary"
+        depends on SEC_DEBUG_SCHED_LOG
+	default n
+	help
+	  Subsystems debug summary feature.
+	  When enabled provides kernel logs, modem logs, RPM registers,
+	  Schedule and IRQ logs at the time of crash along with the
+	  reason for crash, which can be extracted as a html in RAM dump mode.
+
+config SEC_LOG_LAST_KMSG
+	bool "Enable /proc/last_kmsg support: if EMBEDDED"
+	default n
+	help
+	  This option enables /proc/last_kmsg support.
+
+config SEC_SSR_DEBUG_LEVEL_CHK
+	bool "PERIPHERAL SECURE check"
+	default n
+	help
+	  To check the authentication of peripheral image.
+
+config USER_RESET_DEBUG
+	bool "reset reason debug feature in user version"
+	default n
+	help
+	  This option provides reset history log in user version.
+	  This option enable proc/reset_reason support
+
+endif
+
+choice
+	prompt "Version of GAF structure"
+	depends on SEC_DEBUG
+	default SEC_DEBUG_GAF_V5 if PROCA
+	default SEC_DEBUG_GAF_V4
+
+	config SEC_DEBUG_GAF_V4
+		bool "Use GAF structure version 4"
+		help
+		  Default option for kernel without PROCA LSM module.
+
+	config SEC_DEBUG_GAF_V5
+		bool "Use GAF structure version 5"
+		help
+		  Default option for kernel with PROCA LSM module.
+endchoice
+

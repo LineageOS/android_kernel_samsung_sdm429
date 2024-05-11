@@ -32,17 +32,24 @@
 			compatible = "android,firmware";
 			vbmeta {
 				compatible = "android,vbmeta";
-				parts = "vbmeta,boot,system,vendor,dtbo,recovery";
+				parts = "vbmeta,boot,system,vendor,dtbo,recovery,product";
 			};
 
 			fstab {
 				compatible = "android,fstab";
+				product {
+					compatible = "android,product";
+					dev = "/dev/block/platform/soc/7824900.sdhci/by-name/product";
+					type = "ext4";
+					mnt_flags = "ro,errors=panic";
+					fsmgr_flags = "wait,verify,avb";
+				};				
 				vendor {
 					compatible = "android,vendor";
 					dev = "/dev/block/platform/soc/7824900.sdhci/by-name/vendor";
 					type = "ext4";
 					mnt_flags = "ro,barrier=1,discard";
-					fsmgr_flags = "wait,avb";
+					fsmgr_flags = "wait,verify,avb";
 					status = "ok";
 				};
 			};
@@ -129,6 +136,7 @@
 
 	aliases {
 		/* smdtty devices */
+		smd0 = &smdtty_ds;
 		smd1 = &smdtty_apps_fm;
 		smd2 = &smdtty_apps_riva_bt_acl;
 		smd3 = &smdtty_apps_riva_bt_cmd;
@@ -146,6 +154,8 @@
 		spi6 = &spi_6;
 		i2c3 = &i2c_3;
 		i2c4 = &i2c_4;
+        // Bug601073, qiuyonghui.wt, 20201117, add, audio bring up
+        i2c8 = &i2c_8;
 		sdhc1 = &sdhc_1; /* SDC1 eMMC slot */
 		sdhc2 = &sdhc_2; /* SDC2 for SD card */
 	};
@@ -642,6 +652,34 @@
 		status = "disabled";
 	};
 
+    /* +Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
+    i2c_8: i2c@7af8000 { /* BLSP2 QUP4 */ 
+        compatible = "qcom,i2c-msm-v2";
+        #address-cells = <1>;
+        #size-cells = <0>;
+        reg-names = "qup_phys_addr";
+        reg = <0x7af8000 0x600>;
+        interrupt-names = "qup_irq";
+        interrupts = <0 302 0>;
+        dmas = <&dma_blsp1 10 64 0x20000020 0x20>,
+            <&dma_blsp1 11 32 0x20000020 0x20>;
+
+        dma-names = "tx", "rx";
+        qcom,clk-freq-out = <400000>;
+        qcom,clk-freq-in = <19200000>;
+        clock-names = "iface_clk", "core_clk";
+        clocks = <&clock_gcc clk_gcc_blsp2_ahb_clk>,
+            <&clock_gcc clk_gcc_blsp2_qup4_i2c_apps_clk>;
+
+        pinctrl-names = "i2c_active", "i2c_sleep";
+        pinctrl-0 = <&i2c_8_active>;
+        pinctrl-1 = <&i2c_8_sleep>;
+        qcom,noise-rjct-scl = <0>;
+        qcom,noise-rjct-sda = <0>;
+        qcom,master-id = <84>;
+    };
+    /* -Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
+
 	spi_3: spi@78b7000 { /* BLSP1 QUP3 */
 		compatible = "qcom,spi-qup-v2";
 		#address-cells = <1>;
@@ -987,6 +1025,12 @@
 		rpm-channel-type = <15>; /* SMD_APPS_RPM */
 	};
 
+	//+Bug 603959, liangxiaoqin.wt, 20201216, add, add usb_notify node
+	usb_noti: usb-notifier {
+		compatible = "samsung,usb-notifier";
+	};
+	//-Bug 603959, liangxiaoqin.wt, 20201216, add, add usb_notify node
+
 	usb_otg: usb@78db000 {
 		compatible = "qcom,hsusb-otg";
 		reg = <0x78db000 0x400>, <0x6c000 0x200>;
@@ -1078,8 +1122,9 @@
 		reg = <0xb017000 0x1000>;
 		reg-names = "wdt-base";
 		interrupts = <0 3 0>, <0 4 0>;
-		qcom,bark-time = <11000>;
-		qcom,pet-time = <9360>;
+/*chk72111 linyaosen.wt,modify,20201217,modify watchdog bar/pet time*/
+		qcom,bark-time = <15000>;
+		qcom,pet-time = <8000>;
 		qcom,ipi-ping;
 		qcom,wakeup-enable;
 		status = "okay";
@@ -1279,6 +1324,11 @@
 	qcom,smdtty {
 		compatible = "qcom,smdtty";
 
+		smdtty_ds: qcom,smdtty-ds {
+			qcom,smdtty-remote = "modem";
+			qcom,smdtty-port-name = "DS";
+		};
+
 		smdtty_apps_fm: qcom,smdtty-apps-fm {
 			qcom,smdtty-remote = "wcnss";
 			qcom,smdtty-port-name = "APPS_FM";
@@ -1375,6 +1425,21 @@
 			qcom,smdpkt-dev-name = "smd_pkt_loopback";
 		};
 	};
+
+        //+Bug607145 ,moshuya.wt, add, 20201210 add secboot_fuse_reg && serial_num
+	sn_fuse: snfuse@0xa0128 {
+		compatible = "qcom,sn-fuse";
+		reg = <0xa4128 0x4>;
+		reg-names = "sn-base";
+	};
+
+
+	sec_boot_fuse: secbootfuse@0xa41d0 {
+		compatible = "qcom,sec-boot-fuse";
+		reg = <0xa41d0 0x4>;
+		reg-names = "sec-boot-base";
+	};
+        //-Bug607145 ,moshuya.wt, add, 20201210 add secboot_fuse_reg && serial_num
 
 	qcom_tzlog: tz-log@08600720 {
 		compatible = "qcom,tz-log";

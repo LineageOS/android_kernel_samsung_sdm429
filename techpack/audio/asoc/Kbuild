@@ -121,10 +121,23 @@ endif
 ifdef CONFIG_SND_SOC_SDM450
 	MACHINE_OBJS += msm8952.o
 endif
-
+#+bug600729,zhouweijie.wt,add,20201120,Q->R audio bring up
+# for AW87329 PA
+ifdef CONFIG_SND_SOC_AW87329
+	AW87329_PA_OBJS += aw87329_audio.o
+endif
+#-bug600729,zhouweijie.wt,add,20201120,Q->R audio bring up
 ifdef CONFIG_SND_SOC_MSM8909
 	MACHINE_INT_OBJS += msm8952.o
 endif
+
+# +Bug601073, qiuyonghui.wt, 20201117, add, audio bring up
+#for AW87319 PA
+ifdef CONFIG_SND_SOC_AW87319
+    AW87319L_PA_OBJS += aw87319l_audio.o
+    AW87319R_PA_OBJS += aw87319r_audio.o
+endif
+# -Bug601073, qiuyonghui.wt, 20201117, add, audio bring up
 
 # For MSM8909 only add voice svc driver
 ifdef CONFIG_SND_SOC_MSM8909
@@ -230,6 +243,19 @@ endif
 # Module information used by KBuild framework
 obj-$(CONFIG_SND_SOC_QDSP6V2) += platform_dlkm.o
 platform_dlkm-y := $(PLATFORM_OBJS)
+
+#+bug600729,zhouweijie.wt,add,20201120,Q->R audio bring up
+obj-$(CONFIG_SND_SOC_AW87329) += AW87329_dlkm.o
+AW87329_dlkm-y := $(AW87329_PA_OBJS)
+#-bug600729,zhouweijie.wt,add,20201120,Q->R audio bring up
+
+# +Bug601073, qiuyonghui.wt, 20201117, add, audio bring up
+obj-$(CONFIG_SND_SOC_AW87319) += AW87319L_dlkm.o
+AW87319L_dlkm-y := $(AW87319L_PA_OBJS)
+
+obj-$(CONFIG_SND_SOC_AW87319) += AW87319R_dlkm.o
+AW87319R_dlkm-y := $(AW87319R_PA_OBJS)
+# -Bug601073, qiuyonghui.wt, 20201117, add, audio bring up
 
 obj-$(CONFIG_SND_SOC_SDM450) += machine_dlkm.o
 machine_dlkm-y := $(MACHINE_OBJS)

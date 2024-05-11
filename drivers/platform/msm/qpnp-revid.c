@@ -274,7 +274,8 @@ static void __exit qpnp_revid_exit(void)
 	return platform_driver_unregister(&qpnp_revid_driver);
 }
 
-subsys_initcall(qpnp_revid_init);
+//bug 600732, wangcong.wt, modify, 2020/11/30, Modify qpnp_revid_init priority to avoid mdss_dsi_ctrl_probe error
+arch_initcall(qpnp_revid_init);
 module_exit(qpnp_revid_exit);
 
 MODULE_DESCRIPTION("QPNP REVID DRIVER");

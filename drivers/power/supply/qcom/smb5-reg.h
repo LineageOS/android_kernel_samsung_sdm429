@@ -330,7 +330,7 @@ enum {
 #define U_USB_FLOAT2_BIT			BIT(0)
 
 #define TYPE_C_MODE_CFG_REG			(TYPEC_BASE + 0x44)
-#define TYPEC_POWER_ROLE_CMD_MASK		GENMASK(2, 1)
+#define TYPEC_POWER_ROLE_CMD_MASK		GENMASK(2, 0)
 #define EN_TRY_SNK_BIT				BIT(4)
 #define EN_SRC_ONLY_BIT				BIT(2)
 #define EN_SNK_ONLY_BIT				BIT(1)
@@ -425,6 +425,11 @@ enum {
 #define BITE_WDOG_DISABLE_CHARGING_CFG_BIT	BIT(7)
 #define BARK_WDOG_TIMEOUT_MASK			GENMASK(3, 2)
 #define BITE_WDOG_TIMEOUT_MASK			GENMASK(1, 0)
+
+//+Bug 600732,xushengjuan.wt,modify,20201118,S86117,poweroff charger current drop.
+#define MISC_AICL_RERUN_TIME_CFG            (MISC_BASE + 0x61)
+#define MISC_AICL_TIME_MASK                      GENMASK(1, 0)
+//+Bug 600732,xushengjuan.wt,modify,20201118,S86117,poweroff charger current drop.
 
 #define MISC_THERMREG_SRC_CFG_REG		(MISC_BASE + 0x70)
 #define THERMREG_SW_ICL_ADJUST_BIT		BIT(7)

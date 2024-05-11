@@ -31,6 +31,11 @@
 #include "mdss_debug.h"
 #include "mdss_livedisplay.h"
 
+//+bug 600732, wangcong.wt, add, 2020/11/23, Add lcd name in boardinfo
+#include <linux/hardware_info.h>
+extern char Lcm_name[HARDWARE_MAX_ITEM_LONGTH];
+//-bug 600732, wangcong.wt, add, 2020/11/23, Add lcd name in boardinfo
+
 #define DT_CMD_HDR 6
 #define DEFAULT_MDP_TRANSFER_TIME 14000
 
@@ -214,11 +219,20 @@ void mdss_dsi_panel_cmds_send(struct mdss_dsi_ctrl_pdata *ctrl,
 	mdss_dsi_cmdlist_put(ctrl, &cmdreq);
 }
 
-static char led_pwm1[2] = {0x51, 0x0};	/* DTYPE_DCS_WRITE1 */
-static struct dsi_cmd_desc backlight_cmd = {
-	{DTYPE_DCS_WRITE1, 1, 0, 0, 1, sizeof(led_pwm1)},
-	led_pwm1
+//+bug 600732, wangcong.wt, modify, 2020/11/11, Modify panel timming
+static char led_pwm2[3] = {0x51, 0x0, 0x0};
+static struct dsi_cmd_desc backlight_cmd2 = {
+	{DTYPE_DCS_LWRITE, 1, 0, 0, 1, sizeof(led_pwm2)},
+	led_pwm2
 };
+
+static char led_dimming[2] = {0x53, 0x2c};
+static struct dsi_cmd_desc backlight_dimming_cmd[] = {
+    {{DTYPE_DCS_LWRITE, 1, 0, 0, 1, sizeof(led_pwm2)},led_pwm2},
+    {{DTYPE_DCS_LWRITE, 1, 0, 0, 1, sizeof(led_dimming)},led_dimming},
+};
+
+//-bug 600732, wangcong.wt, modify, 2020/11/11, Modify panel timming
 
 static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 {
@@ -232,12 +246,28 @@ static void mdss_dsi_panel_bklt_dcs(struct mdss_dsi_ctrl_pdata *ctrl, int level)
 	}
 
 	pr_debug("%s: level=%d\n", __func__, level);
-
-	led_pwm1[1] = (unsigned char)level;
+	//+bug 600732, wangcong.wt, modify, 2020/11/11, Modify panel timming
+	led_pwm2[1] = (unsigned char)level;
+	if (level)
+		led_pwm2[2] = 8;
+	else
+		led_pwm2[2] = 0;
 
 	memset(&cmdreq, 0, sizeof(cmdreq));
-	cmdreq.cmds = &backlight_cmd;
-	cmdreq.cmds_cnt = 1;
+
+    if (pinfo->first_on_backlight > 2) {
+        cmdreq.cmds = &backlight_cmd2;
+        cmdreq.cmds_cnt = 1;
+    } else if (pinfo->first_on_backlight == 2) {
+        cmdreq.cmds = backlight_dimming_cmd;
+        cmdreq.cmds_cnt = 2;
+        pinfo->first_on_backlight++;
+    } else {
+        cmdreq.cmds = &backlight_cmd2;
+        cmdreq.cmds_cnt = 1;
+        pinfo->first_on_backlight++;
+    }
+	//-bug 600732, wangcong.wt, modify, 2020/11/11, Modify panel timming
 	cmdreq.flags = CMD_REQ_COMMIT;
 	cmdreq.rlen = 0;
 	cmdreq.cb = NULL;
@@ -924,7 +954,8 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 		if (ctrl->ndx != DSI_CTRL_LEFT)
 			goto end;
 	}
-
+	//+bug 600732, wangcong.wt, modify, 2020/11/11, Modify disable dimming when first on backlight
+    pinfo->first_on_backlight = 1;
 	on_cmds = &ctrl->on_cmds;
 
 	if ((pinfo->mipi.dms_mode == DYNAMIC_MODE_SWITCH_IMMEDIATE) &&
@@ -2729,6 +2760,10 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	const char *data;
 	static const char *pdest;
 	struct mdss_panel_info *pinfo = &(ctrl_pdata->panel_data.panel_info);
+	//+bug 600732, wangcong.wt, add, 2020/11/11, Add Lcd backlight map
+	u32 *array;
+	int bl_i;
+	//-bug 600732, wangcong.wt, add, 2020/11/11, Add Lcd backlight map
 
 	if (mdss_dsi_is_hw_config_split(ctrl_pdata->shared_data))
 		pinfo->is_split_display = true;
@@ -2793,6 +2828,41 @@ static int mdss_panel_parse_dt(struct device_node *np,
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-bl-max-level", &tmp);
 	pinfo->bl_max = (!rc ? tmp : 255);
 	ctrl_pdata->bklt_max = pinfo->bl_max;
+
+	//+bug 600732, wangcong.wt, add, 2020/11/11, Add Lcd backlight map
+	rc = of_property_read_u32(np, "ss,blmap-size", &tmp);
+			pinfo->blmap_size = (!rc ? tmp : 0);
+
+	if (pinfo->blmap_size) {
+			array = kzalloc(sizeof(u32) * pinfo->blmap_size, GFP_KERNEL);
+
+		if (!array)
+			return -ENOMEM;
+
+		rc = of_property_read_u32_array(np,
+						"ss,blmap", array, pinfo->blmap_size);
+
+		if (rc) {
+			pr_err("%s:%d, unable to read backlight map\n",
+						__func__, __LINE__);
+			kfree(array);
+			goto error;
+		}
+
+		pinfo->blmap = kzalloc(sizeof(int) * pinfo->blmap_size,
+								GFP_KERNEL);
+			if (!pinfo->blmap) {
+				kfree(array);
+				return -ENOMEM;
+			}
+
+			for (bl_i = 0; bl_i < pinfo->blmap_size; bl_i++)
+				pinfo->blmap[bl_i] = array[bl_i];
+			kfree(array);
+	} else {
+			pinfo->blmap = NULL;
+	}
+	//-bug 600732, wangcong.wt, add, 2020/11/11, Add Lcd backlight map
 
 	rc = of_property_read_u32(np, "qcom,mdss-dsi-interleave-mode", &tmp);
 	pinfo->mipi.interleave_mode = (!rc ? tmp : 0);
@@ -3001,6 +3071,9 @@ int mdss_dsi_panel_init(struct device_node *node,
 	} else {
 		pr_info("%s: Panel Name = %s\n", __func__, panel_name);
 		strlcpy(&pinfo->panel_name[0], panel_name, MDSS_MAX_PANEL_LEN);
+		//+bug 600732, wangcong.wt, add, 2020/11/23, Add lcd name in boardinfo
+		strlcpy(Lcm_name, panel_name, HARDWARE_MAX_ITEM_LONGTH);
+		//-bug 600732, wangcong.wt, add, 2020/11/23, Add lcd name in boardinfo
 	}
 	rc = mdss_panel_parse_dt(node, ctrl_pdata);
 	if (rc) {

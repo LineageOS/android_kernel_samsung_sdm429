@@ -53,6 +53,11 @@
 #include <linux/nmi.h>
 #include <linux/kvm_para.h>
 
+#ifdef CONFIG_SEC_DEBUG
+#include <linux/sec_debug.h>
+#include <linux/sec_debug_summary.h>
+#endif
+
 #include "workqueue_internal.h"
 
 enum {
@@ -2120,6 +2125,7 @@ __acquires(&pool->lock)
 	lock_map_acquire_read(&pwq->wq->lockdep_map);
 	lock_map_acquire(&lockdep_map);
 	trace_workqueue_execute_start(work);
+	
 	worker->current_func(work);
 	/*
 	 * While we must be careful to not use "work" after this, the trace

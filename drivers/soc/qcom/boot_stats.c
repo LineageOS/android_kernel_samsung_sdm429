@@ -15,6 +15,7 @@
 #include <linux/io.h>
 #include <linux/init.h>
 #include <linux/delay.h>
+#include <linux/slab.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
 #include <linux/clk.h>
@@ -22,7 +23,10 @@
 #include <linux/sched.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
+#include <linux/export.h>
+#include <linux/types.h>
 #include <soc/qcom/boot_stats.h>
+#include <linux/sec_bsp.h>
 
 static void __iomem *mpm_counter_base;
 static phys_addr_t mpm_counter_pa;
@@ -69,6 +73,12 @@ static int mpm_parse_dt(void)
 
 static void print_boot_stats(void)
 {
+#ifdef CONFIG_SEC_BSP
+	bootloader_start = readl_relaxed(&boot_stats->bootloader_start);
+	bootloader_end = readl_relaxed(&boot_stats->bootloader_end);
+	bootloader_display = readl_relaxed(&boot_stats->bootloader_display);
+	bootloader_load_kernel = readl_relaxed(&boot_stats->bootloader_load_kernel);
+#endif
 	pr_info("KPI: Bootloader start count = %u\n",
 			readl_relaxed(&boot_stats->bootloader_start));
 	pr_info("KPI: Bootloader end count = %u\n",
@@ -124,6 +134,18 @@ phys_addr_t msm_timer_get_pa(void)
 	return mpm_counter_pa;
 }
 
+#ifdef CONFIG_SEC_BSP
+unsigned int get_boot_stat_time(void)
+{
+	return readl_relaxed(mpm_counter_base);
+}
+unsigned int get_boot_stat_freq(void)
+{
+	return mpm_counter_freq;
+}
+#endif
+
+
 int boot_stats_init(void)
 {
 	int ret;
@@ -143,6 +165,9 @@ int boot_stats_init(void)
 int boot_stats_exit(void)
 {
 	iounmap(boot_stats);
+#if !defined(CONFIG_SEC_BSP)
 	iounmap(mpm_counter_base);
+#endif
+
 	return 0;
 }

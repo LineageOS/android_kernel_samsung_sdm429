@@ -561,6 +561,13 @@ void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 
 	pr_debug("%s: enter insertion %d hph_status %x\n",
 		 __func__, insertion, mbhc->hph_status);
+//+bug 603945, tangliang1.wt, modify, 20201211, modify for car AUX cable function
+#ifdef CONFIG_SND_SOC_AW87319
+    if (jack_type == SND_JACK_LINEOUT) {
+	    jack_type = SND_JACK_HEADPHONE;
+    }
+#endif
+//-bug 603945, tangliang1.wt, modify, 20201211, modify for car AUX cable function
 	if (!insertion) {
 		/* Report removal */
 		mbhc->hph_status &= ~jack_type;
@@ -601,7 +608,15 @@ void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 			 jack_type, mbhc->hph_status);
 		wcd_mbhc_jack_report(mbhc, &mbhc->headset_jack,
 				mbhc->hph_status, WCD_MBHC_JACK_MASK);
-		wcd_mbhc_set_and_turnoff_hph_padac(mbhc);
+/* +Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
+#ifdef CONFIG_SND_SOC_AW87319
+        if(0) {
+		    wcd_mbhc_set_and_turnoff_hph_padac(mbhc);
+        }
+#else
+        wcd_mbhc_set_and_turnoff_hph_padac(mbhc);
+#endif
+/* -Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
 		hphrocp_off_report(mbhc, SND_JACK_OC_HPHR);
 		hphlocp_off_report(mbhc, SND_JACK_OC_HPHL);
 		mbhc->current_plug = MBHC_PLUG_TYPE_NONE;

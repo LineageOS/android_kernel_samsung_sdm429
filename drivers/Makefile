@@ -181,3 +181,9 @@ obj-$(CONFIG_ESOC)              += esoc/
 obj-$(CONFIG_FPGA)		+= fpga/
 obj-$(CONFIG_SENSORS_SSC)		+= sensors/
 obj-$(CONFIG_TEE)		+= tee/
+
+# CONFIG_SEC_DEBUG
+obj-y				+= debug/
+
+# CONFIG_SS_VIBRATOR
+obj-y				+= motor/

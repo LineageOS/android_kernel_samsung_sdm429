@@ -93,6 +93,8 @@ static bool match_index(struct hid_usage *usage,
 
 typedef bool (*hid_usage_cmp_t)(struct hid_usage *usage,
 				unsigned int cur_idx, unsigned int val);
+				
+extern bool lcd_is_on;
 
 static struct hid_usage *hidinput_find_key(struct hid_device *hid,
 					   hid_usage_cmp_t match,
@@ -1101,7 +1103,7 @@ mapped:
 		 * The driver indicated that no further generic handling
 		 * of the usage is desired.
 		 */
-		return;
+		goto ignore;
 	}
 
 	set_bit(usage->type, input->evbit);
@@ -1408,6 +1410,12 @@ static void hidinput_led_worker(struct work_struct *work)
 	buf = hid_alloc_report_buf(report, GFP_KERNEL);
 	if (!buf)
 		return;
+	
+	if (!lcd_is_on) {
+        printk(KERN_DEBUG "lcd is OFF, don't report LED event\n");
+		kfree(buf);
+		return;
+	}
 
 	hid_output_report(report, buf);
 	/* synchronous output report */

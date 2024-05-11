@@ -18,6 +18,12 @@
 #include "wcdcal-hwdep.h"
 #include <sound/jack.h>
 
+/* +Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
+#ifdef  CONFIG_ARCH_MSM8937
+#include <linux/qpnp/qpnp-adc.h>
+#endif
+/* -Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
+
 #define TOMBAK_MBHC_NC	0
 #define TOMBAK_MBHC_NO	1
 #define WCD_MBHC_DEF_BUTTONS 8
@@ -431,6 +437,16 @@ struct wcd_mbhc_config {
 	bool enable_anc_mic_detect;
 	u32 enable_usbc_analog;
 	struct usbc_ana_audio_config usbc_analog_cfg;
+/* +Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
+#ifdef CONFIG_ARCH_MSM8937
+    int hph_en_gpio;
+    int hph_in_gpio;
+/* +Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
+    enum qpnp_vadc_channels adc_channel;
+    struct qpnp_vadc_chip *vadc_dev;
+/* -Bug603949, qiuyonghui.wt, 20201210, add for mbhc adc detect */
+#endif
+/* -Bug601073, qiuyonghui.wt, 20201117, add, audio bring up */
 };
 
 struct wcd_mbhc_intr {

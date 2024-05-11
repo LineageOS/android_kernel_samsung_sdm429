@@ -72,7 +72,11 @@ enum print_reason {
 #define MOISTURE_VOTER			"MOISTURE_VOTER"
 #define USBOV_DBC_VOTER			"USBOV_DBC_VOTER"
 #define FCC_STEPPER_VOTER		"FCC_STEPPER_VOTER"
+//+Bug 600732,xushengjuan.wt,modify,20201118,S86117,charger bring up
+//Bug 427130 caijiaqi.wt,ADD,20190121,P81081 charger bring up, add debug log
+#define CHG_INSERT_VOTER			"CHG_INSERT_VOTER"
 #define CHG_TERMINATION_VOTER		"CHG_TERMINATION_VOTER"
+//-Bug 600732,xushengjuan.wt,modify,20201118,S86117,charger bring up
 
 #define BOOST_BACK_STORM_COUNT	3
 #define WEAK_CHG_STORM_COUNT	8
@@ -81,13 +85,46 @@ enum print_reason {
 
 #define SDP_100_MA			100000
 #define SDP_CURRENT_UA			500000
-#define CDP_CURRENT_UA			1500000
+//+Bug 600732,xushengjuan.wt,modify,20201118,S86117,charger bring up
+//+Bug 427130 caijiaqi.wt,MODIFIY,20190121,P81081 charger bring up
+#define CDP_CURRENT_UA			900000
+#define FLOAT_CURRENT_UA		900000
 #define DCP_CURRENT_UA			1500000
-#define HVDCP_CURRENT_UA		3000000
+//+Bug 427130 caijiaqi.wt,MODIFIY,20190121,P81081 charger bring up
+//Bug 455539 caijiaqi.wt,MODIFIY,20190705,S86119 Modifiy open hvdcp for QC20
+//Bug 455539 caijiaqi.wt,MODIFIY,20190705,S86119 Modifiy open hvdcp for QC20
+#define HVDCP_CURRENT_UA                1650000
 #define TYPEC_DEFAULT_CURRENT_UA	900000
 #define TYPEC_MEDIUM_CURRENT_UA		1500000
 #define TYPEC_HIGH_CURRENT_UA		3000000
 
+//+Bug 437351 caijiaqi.wt,MODIFIY,20190409,P81081 add battery online node
+#define	BATTERY_ONLINE_INCOMPATIBLE_CHARGER	0
+#define	BATTERY_ONLINE_NONE	1
+#define	BATTERY_ONLINE_TA	3
+#define	BATTERY_ONLINE_USB	4
+#define	BATTERY_ONLINE_WIRELESS_CHARGER	10
+#define	BATTERY_ONLINE_POGO	23
+//Bug 472563 caijiaqi.wt,MODIFIY,20190823,S86119 add battery online node about PD
+#define BATTERY_ONLINE_PD_DCP			44
+#define	BATTERY_ONLINE_FAST_WIRELESS_CHARGER	100
+//-Bug 437351 caijiaqi.wt,MODIFIY,20190409,P81081 add battery online node
+
+//+Bug 437373 caijiaqi.wt, ADD,20190410,P81081 add battery node for customer
+#define SEC_BAT_CURRENT_EVENT_NONE	0x00000
+#define SEC_BAT_CURRENT_EVENT_AFC	0x00001
+#define SEC_BAT_CURRENT_EVENT_CHARGE_DISABLE		0x00002
+#define SEC_BAT_CURRENT_EVENT_SKIP_HEATING_CONTROL	0x00004
+#define SEC_BAT_CURRENT_EVENT_LOW_TEMP_SWELLING		0x00010
+#define SEC_BAT_CURRENT_EVENT_HIGH_TEMP_SWELLING	0x00020
+#define SEC_BAT_CURRENT_EVENT_USB_100MA	0x00040
+#define SEC_BAT_CURRENT_EVENT_SLATE	0x00800
+
+#define BATT_MISC_EVENT_UNDEFINED_RANGE_TYPE	0x00000001
+#define BATT_MISC_EVENT_TIMEOUT_OPEN_TYPE	0x00000004
+#define BATT_MISC_EVENT_HICCUP_TYPE		0x00000020
+//-Bug 437373 caijiaqi.wt, ADD,20190410,P81081 add battery node for customer
+//-Bug 600732,xushengjuan.wt,modify,20201118,S86117,charger bring up
 enum smb_mode {
 	PARALLEL_MASTER = 0,
 	PARALLEL_SLAVE,
@@ -361,6 +398,12 @@ struct smb_charger {
 	struct delayed_work	uusb_otg_work;
 	struct delayed_work	bb_removal_work;
 	struct delayed_work	usbov_dbc_work;
+	//+Bug 600732,xushengjuan.wt,modify,20201118,S86117,charger bring up
+	//Bug 427130 caijiaqi.wt,ADD,20190121,P81081 charger bring up, add debug log
+	struct delayed_work	period_update_work;
+	//Bug 437373 caijiaqi.wt, ADD,20190410,P81081 add battery node for customer
+	struct delayed_work	usb_update_work;
+	//-Bug 600732,xushengjuan.wt,modify,20201118,S86117,charger bring up
 
 	/* alarm */
 	struct alarm		moisture_protection_alarm;
@@ -384,7 +427,17 @@ struct smb_charger {
 	int			*thermal_mitigation;
 	int			dcp_icl_ua;
 	int			fake_capacity;
+//+Bug 600732,xushengjuan.wt,modify,20201118,S86117,charger bring up
+	//+Bug 437373 caijiaqi.wt, ADD,20190410,P81081 add battery node for customer
+	int			usb_suspend_mode;
+	//-Bug 437373 caijiaqi.wt, ADD,20190410,P81081 add battery node for customer
 	int			fake_batt_status;
+//+bug 452108 ,caijiaqi.wt,Modify,20190618,some device use AFC charger ,charger error
+#ifdef  CONFIG_ARCH_SDM429
+	bool			dcp_dpdm_flag;
+#endif
+//-bug 452108 ,caijiaqi.wt,Modify,20190618,some device use AFC charger ,charger error
+//-Bug 600732,xushengjuan.wt,modify,20201118,S86117,charger bring up
 	bool			step_chg_enabled;
 	bool			sw_jeita_enabled;
 	bool			is_hdc;

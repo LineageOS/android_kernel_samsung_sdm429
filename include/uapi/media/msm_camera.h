@@ -266,7 +266,7 @@ struct msm_mctl_post_proc_cmd {
 #define MSM_CAMERA_STROBE_FLASH_NONE 0
 #define MSM_CAMERA_STROBE_FLASH_XENON 1
 
-#define MSM_MAX_CAMERA_SENSORS  5
+#define MSM_MAX_CAMERA_SENSORS  16//bug 600732,huangguoyong.wt, add,2020/11/16,86118 project camera kernel code for bring up ,modify camera id(main back:0,front:1,back aux:50,back wide:51,bokeh:21) 
 #define MAX_SENSOR_NAME 32
 #define MAX_CAM_NAME_SIZE 32
 #define MAX_ACT_MOD_NAME_SIZE 32

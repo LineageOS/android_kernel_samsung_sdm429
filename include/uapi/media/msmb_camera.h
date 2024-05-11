@@ -57,7 +57,7 @@
 #define MSM_CAMERA_SUBDEV_EXT          (MSM_CAMERA_SUBDEV_BASE + 19)
 #define MSM_CAMERA_SUBDEV_TOF          (MSM_CAMERA_SUBDEV_BASE + 20)
 #define MSM_CAMERA_SUBDEV_LASER_LED    (MSM_CAMERA_SUBDEV_BASE + 21)
-#define MSM_MAX_CAMERA_SENSORS  5
+#define MSM_MAX_CAMERA_SENSORS  16//bug 600732,huangguoyong.wt, add,2020/11/16,86118 project camera kernel code for bring up ,modify camera id(main back:0,front:1,back aux:50,back wide:51,bokeh:21) 
 
 /* The below macro is defined to put an upper limit on maximum
  * number of buffer requested per stream. In case of extremely
