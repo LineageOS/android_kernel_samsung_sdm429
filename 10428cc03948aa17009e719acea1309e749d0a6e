@@ -16,6 +16,23 @@
       "message": "it doesn\u0027t deny new usb",
       "revId": "10428cc03948aa17009e719acea1309e749d0a6e",
       "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "591bf644_360d3bf0",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 31496
+      },
+      "writtenOn": "2024-05-29T09:14:35Z",
+      "side": 1,
+      "message": "It seems I had the wrong understanding about what this is actually doing",
+      "revId": "10428cc03948aa17009e719acea1309e749d0a6e",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
     }
   ]
 }
